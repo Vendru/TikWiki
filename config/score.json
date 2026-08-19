@@ -37,15 +37,21 @@
   },
 
   "curatedBonus": {
-    "value": 12.0,
-    "$why": "Artigo aprovado pela curadoria humana entra acima da varredura ampla mesmo com métricas modestas — é exatamente o caso do artigo peculiar, curto e pouco linkado, que é o coração do produto."
+    "value": 15.0,
+    "$why": "Calibrado contra as duas distribuições reais do pool. Ao contrário do esperado, os curados já vencem a varredura ampla em todos os percentis SEM bônus — mediana crua 85,1 contra 71,7 —, porque a lista peculiar também favorece artigos bem desenvolvidos. O bônus então não serve para alcançar paridade, e sim para valer o que o score não mede: julgamento humano sobre o que é curioso. 15 põe a mediana dos curados em 100,1, entre o p75 (89,0) e o p90 (113,0) da varredura, ou seja, um artigo curado típico bate cerca de 80% da varredura.",
+    "$distribuicoes": {
+      "curado_cru": { "p25": 65.7, "p50": 85.1, "p75": 104.0, "p90": 119.4 },
+      "varredura": { "p25": 56.8, "p50": 71.7, "p75": 89.0, "p90": 113.0 }
+    }
   },
 
   "surprise": {
-    "pageviewsWeight": 1.8,
+    "pageviewsWeight": 3.0,
     "pageviewsScale": 1,
     "$formula": "score_surprise = score_quality - pageviewsWeight * 10 * log10(1 + pageviews / pageviewsScale)",
-    "$why": "Qualidade alta com pouca audiência é onde mora a sensação de descoberta; artigo popular o usuário provavelmente já conhece. O peso é maior que o de qualquer métrica isolada de qualidade para que a audiência de fato mova o ranking, mas não tão alto que só sobre artigo obscuro e ruim.",
-    "$pageviewsAusente": "Sem dado de audiência, surprise cai para quality: não dá para afirmar que é obscuro."
+    "$why": "Qualidade alta com pouca audiência é onde mora a sensação de descoberta; artigo popular o usuário provavelmente já conhece. Calibrado olhando o topo do ranking a cada peso: com 1,8 sobravam quatro artigos de mais de 10 mil visualizações no top 6, incluindo 'Human' — ninguém precisa descobrir o que é um humano. Com 3,0 nenhum passa de 10 mil.",
+    "$acima_de_3": "Testado em 4,5 e 6,0: o topo vira 'Boxing at the 1924 Summer Olympics – Middleweight' e 'Roy Fowler (Paralympian)'. Passado o joelho, o score deixa de premiar descoberta e passa a perseguir obscuridade pura, que correlaciona com tédio. É o mesmo limite registrado no README: nenhuma métrica estrutural sabe o que é curioso.",
+    "$pageviewsAusente": "Sem dado de audiência, surprise cai para quality: não dá para afirmar que é obscuro.",
+    "$negativos": "Com este peso, artigo muito popular fica com surpresa negativa. É um score relativo e isso é esperado, mas o sorteio ponderado da etapa 4 precisa deslocar a escala antes de usar como peso."
   }
 }

@@ -52,8 +52,11 @@ async function main() {
   const db = openDb();
   const scoreCfg = loadScoreConfig();
 
-  // Sem --limit, mede quem ainda não tem métrica; com ele, uma amostra.
-  const where = scoreOnly ? "1=1" : "backlinks IS NULL";
+  // Mede quem está faltando alguma coisa. Audiência ausente entra na conta:
+  // pode ser artigo sem histórico, mas o cache guarda também esse "sem dado",
+  // então reconsultar não custa rede — e a chave do cache inclui o mês, que é
+  // o que faz o número envelhecer junto com a realidade.
+  const where = scoreOnly ? "1=1" : "backlinks IS NULL OR pageviews IS NULL";
   const rows = db
     .prepare(
       `SELECT page_id, title, bytes, langlinks, backlinks, refs, images,

@@ -15,16 +15,17 @@ read-only em produção.
 
 ## Estado atual
 
-Etapas 1 e 2 concluídas: pipeline da lista de Artigos peculiares, e app web
-sorteando desse pool.
+Etapas 1 a 3 concluídas: pipeline da lista de Artigos peculiares, app web
+sorteando desse pool, e o filtro, o score e a varredura ampla.
 
 | Métrica | Valor |
 | --- | --- |
-| Artigos no pool (`en`) | 4.202 |
-| Com resumo | 4.202 (100%) |
-| Com nota do curador | 4.151 (98,8%) |
-| Com imagem | 2.514 (59,8%) |
-| Tamanho do arquivo | 6,8 MB |
+| Artigos no pool (`en`) | 4.329 |
+| Da lista curada / da varredura | 4.202 / 127 |
+| Com resumo | 4.329 (100%) |
+| Com nota do curador | 4.151 |
+| Com métricas e score | 4.329 (100%) |
+| Tamanho do arquivo | ~7 MB |
 
 ## Como rodar
 
@@ -223,6 +224,45 @@ nenhuma métrica estrutural captura.
 Isso está registrado como achado, não como pendência resolvida: mexer nos pesos
 não conserta, porque o problema é a escolha das métricas, não a ponderação
 delas. Ver "Decisões em aberto".
+
+### Calibração dos scores
+
+Duas decisões que os dados do pool medido resolveram, uma delas contra a
+expectativa.
+
+**Bônus de curadoria: 15.** A suposição era que a varredura ampla afogaria os
+artigos peculiares e que o bônus existiria para alcançar paridade. É o
+contrário — os curados vencem em todos os percentis mesmo sem bônus:
+
+| percentil | curado (sem bônus) | varredura |
+| --- | --- | --- |
+| p25 | 65,7 | 56,8 |
+| p50 | 85,1 | 71,7 |
+| p75 | 104,0 | 89,0 |
+| p90 | 119,4 | 113,0 |
+
+A lista peculiar também favorece artigo bem desenvolvido, não só estranho.
+Então o bônus não serve para empatar, e sim para valer o que o score não mede.
+15 põe a mediana dos curados em 100,1, entre o p75 e o p90 da varredura: um
+artigo curado típico bate cerca de 80% dela.
+
+**Peso da audiência na surpresa: 3,0.** Calibrado olhando o topo do ranking a
+cada peso:
+
+| peso | topo do ranking |
+| --- | --- |
+| 1,8 | 4 dos 6 primeiros com mais de 10 mil visualizações, incluindo "Human" |
+| **3,0** | **nenhum acima de 10 mil; "Argel Fuchs", "FC Slutsk"** |
+| 4,5 | "Boxing at the 1924 Summer Olympics – Middleweight" |
+| 6,0 | "Roy Fowler (Paralympian)" |
+
+3,0 é o joelho. Acima dele o score deixa de premiar descoberta e passa a
+perseguir obscuridade pura — que correlaciona com tédio, e é a mesma limitação
+da seção anterior vista pela outra ponta.
+
+Com esse peso, 53% do pool fica com surpresa negativa. É um score relativo e
+isso é esperado, mas **o sorteio ponderado da etapa 4 precisa deslocar a escala
+antes de usar `score_surprise` como peso**.
 
 ## Schema
 
