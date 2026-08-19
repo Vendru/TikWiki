@@ -3,7 +3,7 @@ import path from "node:path";
 import { CONFIG_DIR } from "../config";
 import { WikiApiError, WikiClient } from "../wiki/client";
 import { type QueryResponse, requirePages } from "../wiki/parse";
-import { stripWikitext } from "../wiki/wikitext";
+import { stripWikitext, tidyNote } from "../wiki/wikitext";
 
 /**
  * Arquivo do "Você sabia?" — os ganchos que passaram pela capa.
@@ -107,15 +107,12 @@ export interface Hook {
 const BOLD_LINK = /'''+\s*(?:''')?\s*\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]/g;
 const OTHER_NS = /^(File|Image|Category|Template|Wikipedia|Help|Portal|WP|Talk):/i;
 
-/** Tira o "...that " inicial e as sobras de legenda de imagem. */
+/** Tira o "...that " inicial e passa pela limpeza comum às notas. */
 function limparGancho(linha: string): string {
   let s = stripWikitext(linha.replace(/^\*+\s*/, ""));
   s = s.replace(/^\.{2,}\s*/, "");
   s = s.replace(/^that\s+/i, "");
-  // "(pictured)" e variantes referem-se à foto da capa, que não temos.
-  s = s.replace(/\s*\(\s*(?:pictured|imagem|na foto)[^)]*\)/gi, "");
-  s = s.replace(/\s{2,}/g, " ").trim();
-  return s ? s[0].toUpperCase() + s.slice(1) : s;
+  return tidyNote(s);
 }
 
 /**

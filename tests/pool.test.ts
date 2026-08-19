@@ -90,6 +90,51 @@ describe("randomArticle", () => {
   });
 });
 
+describe("randomArticle — sorteio por rowid", () => {
+  it("continua uniforme com buracos no rowid deixados por remoções", async () => {
+    // O sorteio usa rowid; remover linhas abre buracos, e um 'rowid >= ?'
+    // favoreceria quem vem logo depois de cada buraco.
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "tikwiki-gaps-"));
+    const file = path.join(dir2, "gaps.db");
+    const seed2 = openDb({ file });
+    upsertArticles(
+      seed2,
+      Array.from({ length: 60 }, (_, i) => ({
+        lang: "en",
+        pageId: i + 1,
+        title: `G${i + 1}`,
+        url: `https://en.wikipedia.org/wiki/G${i + 1}`,
+        source: "unusual",
+        curated: true,
+      })),
+    );
+    // Deixa só os pares: metade da faixa de rowid vira buraco.
+    seed2.prepare(`DELETE FROM articles WHERE page_id % 2 = 1`).run();
+    seed2.close();
+
+    process.env.TIKWIKI_DB = file;
+    vi.resetModules();
+    const { randomArticle } = await import("../src/lib/db/pool");
+
+    const contagem = new Map<number, number>();
+    for (let i = 0; i < 3000; i++) {
+      const a = randomArticle({ lang: "en" });
+      expect(a).toBeDefined();
+      contagem.set(a!.pageId, (contagem.get(a!.pageId) ?? 0) + 1);
+    }
+
+    expect(contagem.size).toBe(30);
+    // Uniforme daria 100 por artigo; a folga cobre a variação aleatória.
+    const valores = [...contagem.values()];
+    expect(Math.min(...valores)).toBeGreaterThan(45);
+    expect(Math.max(...valores)).toBeLessThan(180);
+
+    process.env.TIKWIKI_DB = dbFile;
+    vi.resetModules();
+    fs.rmSync(dir2, { recursive: true, force: true });
+  });
+});
+
 describe("poolSize", () => {
   it("conta apenas o idioma pedido", async () => {
     const { poolSize } = await load();

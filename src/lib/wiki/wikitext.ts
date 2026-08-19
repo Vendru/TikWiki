@@ -31,6 +31,32 @@ export function stripWikitext(input: string): string {
   return s;
 }
 
+/**
+ * Atributos de célula de wikitable que precedem o conteúdo.
+ *
+ * Uma célula pode trazer formatação antes do texto — `| width="70%" | texto` —
+ * e quem lê a partir do primeiro `|` leva os atributos junto.
+ */
+const CELL_ATTRS =
+  /^\s*(?:[a-zA-Z-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s|]+)\s*)+\|\s*/;
+
+/** Parênteses que se referem à foto que acompanhava a entrada na capa. */
+const PICTURED = /\s*\([^)]*\b(?:pictured|imagem|na foto)\b[^)]*\)/gi;
+
+/**
+ * Limpa uma nota escrita à mão, seja da lista peculiar ou de um gancho.
+ *
+ * Some com o que é andaime da página de origem e não diz nada ao leitor: a
+ * formatação da célula e a referência a uma foto que o card não tem.
+ */
+export function tidyNote(note: string): string {
+  let s = note.replace(CELL_ATTRS, "");
+  s = s.replace(PICTURED, "");
+  s = s.replace(/\s+([,.;:!?])/g, "$1");
+  s = s.replace(/\s{2,}/g, " ").trim();
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
 export interface ListEntry {
   title: string;
   /** Descrição escrita pelo curador explicando por que o artigo é peculiar. */
@@ -89,7 +115,7 @@ export function parseUnusualList(wikitext: string): ListEntry[] {
       }
     }
 
-    const note = stripWikitext(rawNote);
+    const note = tidyNote(stripWikitext(rawNote));
     const key = title.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
