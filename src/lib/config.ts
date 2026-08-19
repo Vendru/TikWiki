@@ -23,9 +23,17 @@ export const articleUrl = (title: string, lang: string = WIKI_LANG) =>
 
 const root = process.cwd();
 
-export const DB_PATH = process.env.TIKWIKI_DB ?? path.join(root, "data", "pool.db");
-export const CACHE_DIR =
+/**
+ * Caminhos lidos do ambiente na hora do uso, não no carregamento do módulo:
+ * scripts e testes precisam apontar para outro pool sem depender da ordem em
+ * que os imports foram avaliados.
+ */
+export const dbPath = () =>
+  process.env.TIKWIKI_DB ?? path.join(root, "data", "pool.db");
+
+export const cacheDir = () =>
   process.env.TIKWIKI_CACHE ?? path.join(root, ".cache", "wiki");
+
 export const CONFIG_DIR = path.join(root, "config");
 
 /** Intervalo mínimo entre requests, em ms. Conservador de propósito. */

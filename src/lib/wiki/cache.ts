@@ -1,14 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { CACHE_DIR } from "../config";
+import { cacheDir } from "../config";
 
 /**
  * Cache em disco das respostas cruas da API. Reexecutar a pipeline não deve
  * refazer a rede toda — o custo de uma varredura ampla está quase todo aqui.
  */
 export class DiskCache {
-  constructor(private readonly dir: string = CACHE_DIR) {}
+  constructor(private readonly dir: string = cacheDir()) {}
 
   private pathFor(key: string): string {
     const hash = crypto.createHash("sha256").update(key).digest("hex");

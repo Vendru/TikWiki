@@ -1,0 +1,11 @@
+{
+  "$comment": "Regras do filtro de exclusão, aplicadas antes do score e apenas a artigos de fontes não curadas. Calibrado empiricamente; a etapa 3 preenche o resto das regras e o relatório de quanto cada uma derruba.",
+  "minBytes": {
+    "value": 6000,
+    "$rationale": "Comparação da distribuição de bytes entre os 4.202 artigos aprovados pela curadoria e 750 artigos do list=random. O limiar de 6000 corta 56,1% dos aleatórios perdendo 15,8% dos curados. É o ponto onde a troca marginal vira: de 6000 para 8000 corta só 10,2pp a mais de lixo custando 10,7pp a mais de bons, ou seja, deixa de compensar. Abaixo de 6000 cada passo ainda remove 1,6x a 3,3x mais lixo do que perde artigo bom.",
+    "$percentis": {
+      "curados": { "p5": 3617, "p25": 7709, "p50": 13580 },
+      "aleatorios": { "p5": 1099, "p25": 2752, "p50": 5194 }
+    }
+  }
+}
