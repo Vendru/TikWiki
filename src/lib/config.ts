@@ -39,8 +39,14 @@ export const CONFIG_DIR = path.join(root, "config");
 /** Intervalo mínimo entre requests, em ms. Conservador de propósito. */
 export const REQUEST_INTERVAL_MS = Number(process.env.WIKI_INTERVAL_MS ?? 200);
 
-/** Teto de tentativas em 429/5xx antes de desistir. */
-export const MAX_RETRIES = Number(process.env.WIKI_MAX_RETRIES ?? 5);
+/**
+ * Teto de tentativas em 429/5xx antes de desistir.
+ *
+ * Folgado de propósito: numa corrida de centenas de milhares de requests o
+ * servidor pede para desacelerar de tempos em tempos, e desistir cedo derruba
+ * a corrida inteira por um contratempo passageiro.
+ */
+export const MAX_RETRIES = Number(process.env.WIKI_MAX_RETRIES ?? 8);
 
 /** Máximo de títulos por request aceito pela Action API para clientes anônimos. */
 export const TITLES_PER_REQUEST = 50;

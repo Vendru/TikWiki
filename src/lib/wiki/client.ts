@@ -37,6 +37,16 @@ export class WikiClient {
   private readonly refresh: boolean;
   private readonly onRequest?: ClientOptions["onRequest"];
   private nextSlot = 0;
+  /**
+   * Intervalo extra imposto depois de um 429, em ms.
+   *
+   * Repetir o request sem desacelerar o resto é o que transforma um 429 numa
+   * sequência de 429: o servidor pediu para ir mais devagar, e isso vale para
+   * a fila inteira, não só para a chamada que apanhou. A penalidade cresce a
+   * cada recusa e decai devagar conforme os requests voltam a passar.
+   */
+  private penalidade = 0;
+  private recusas = 0;
 
   constructor(opts: ClientOptions = {}) {
     this.lang = opts.lang ?? WIKI_LANG;
@@ -45,12 +55,32 @@ export class WikiClient {
     this.onRequest = opts.onRequest;
   }
 
-  /** Serializa os requests respeitando o intervalo mínimo configurado. */
+  /** Serializa os requests respeitando o intervalo mínimo e a penalidade. */
   private async throttle(): Promise<void> {
     const now = Date.now();
     const wait = Math.max(0, this.nextSlot - now);
-    this.nextSlot = Math.max(now, this.nextSlot) + REQUEST_INTERVAL_MS;
+    this.nextSlot = Math.max(now, this.nextSlot) + REQUEST_INTERVAL_MS + this.penalidade;
     if (wait > 0) await sleep(wait);
+  }
+
+  /** Teto da penalidade: acima disso a corrida não anda mais. */
+  private static readonly PENALIDADE_MAX = 5_000;
+
+  private desacelerar(retryAfterMs?: number): void {
+    this.recusas++;
+    const proposta = retryAfterMs ?? Math.max(250, this.penalidade * 2 || 250);
+    this.penalidade = Math.min(WikiClient.PENALIDADE_MAX, Math.max(this.penalidade, proposta));
+  }
+
+  /** Uma sequência de sucessos devolve o ritmo aos poucos. */
+  private acelerar(): void {
+    if (this.penalidade > 0) this.penalidade = Math.floor(this.penalidade * 0.9);
+    if (this.penalidade < 20) this.penalidade = 0;
+  }
+
+  /** Quantas vezes o servidor pediu para desacelerar nesta sessão. */
+  get recusasObservadas(): number {
+    return this.recusas;
   }
 
   private cacheKey(params: Params): string {
@@ -124,9 +154,29 @@ export class WikiClient {
         continue;
       }
 
-      if (res.ok) return res.json();
+      if (res.ok) {
+        this.acelerar();
+        return res.json();
+      }
 
-      if (res.status === 429 || res.status >= 500) {
+      if (res.status === 429) {
+        // Retry-After pode vir em segundos ou como data; só o número
+        // interessa, e um valor absurdo não pode travar a corrida.
+        const cabecalho = Number(res.headers.get("retry-after"));
+        const retryAfterMs =
+          Number.isFinite(cabecalho) && cabecalho > 0
+            ? Math.min(cabecalho * 1000, 60_000)
+            : undefined;
+        this.desacelerar(retryAfterMs);
+        if (retryAfterMs) await sleep(retryAfterMs);
+        lastError = new WikiApiError(
+          `HTTP 429 em ${url.pathname}${url.search.slice(0, 200)}`,
+          429,
+        );
+        continue;
+      }
+
+      if (res.status >= 500) {
         lastError = new WikiApiError(
           `HTTP ${res.status} em ${url.pathname}${url.search.slice(0, 200)}`,
           res.status,
