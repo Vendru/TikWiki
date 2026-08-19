@@ -8,6 +8,7 @@
 import { WIKI_LANG, articleUrl } from "../src/lib/config";
 import { WikiClient } from "../src/lib/wiki/client";
 import { fetchPageFacts } from "../src/lib/wiki/pages";
+import { cleanExtract } from "../src/lib/wiki/extract";
 import {
   SOURCE,
   collectEntries,
@@ -106,7 +107,7 @@ async function main() {
       pageId: f.pageId,
       title: f.title,
       url: f.url ?? articleUrl(f.title, lang),
-      extract: f.extract,
+      extract: f.extract ? cleanExtract(f.extract) : undefined,
       thumbnailUrl: f.thumbnailUrl,
       curatorNote: entry.note,
       bytes: f.bytes,

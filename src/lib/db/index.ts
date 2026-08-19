@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { DB_PATH } from "../config";
+import { dbPath } from "../config";
 
 export type DB = Database.Database;
 
@@ -12,7 +12,7 @@ const SCHEMA = path.join(process.cwd(), "src", "lib", "db", "schema.sql");
  * artefato de build, nunca escrito durante um request.
  */
 export function openDb(opts: { readonly?: boolean; file?: string } = {}): DB {
-  const file = opts.file ?? DB_PATH;
+  const file = opts.file ?? dbPath();
 
   if (opts.readonly) {
     if (!fs.existsSync(file)) {
