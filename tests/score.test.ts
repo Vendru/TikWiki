@@ -35,15 +35,36 @@ describe("qualityScore", () => {
     expect(b).toBeGreaterThan(a);
   });
 
-  it("trata métrica ausente como não medida, não como zero ruim", () => {
-    const semRefs = qualityScore({ ...cheio, refs: null }, cfg);
-    const comRefsZero = qualityScore({ ...cheio, refs: 0 }, cfg);
-    // log10(1+0) = 0, então os dois batem: ausente não penaliza além de zero.
-    expect(semRefs).toBe(comRefsZero);
+  it("distingue métrica não medida de métrica medida como zero", () => {
+    // Ausente sai da conta; zero entra e puxa a média para baixo. Sem essa
+    // distinção, quem não teve backlinks medidos pontuaria como quem não tem
+    // nenhum — e a cobertura desigual é a regra, não a exceção.
+    const naoMedido = qualityScore({ ...cheio, refs: null }, cfg);
+    const medidoZero = qualityScore({ ...cheio, refs: 0 }, cfg);
+    expect(naoMedido).toBeGreaterThan(medidoZero);
+  });
+
+  it("não penaliza quem tem menos métricas medidas", () => {
+    // Um artigo no p90 das métricas que temos vale 100, tendo sido medido em
+    // seis delas ou em duas.
+    const p90 = Object.fromEntries(
+      Object.entries(cfg.quality).map(([n, t]) => [n, t.ref]),
+    ) as Metrics;
+    const { backlinks: _b, pageviews: _p, ...semBacklinks } = p90;
+    expect(qualityScore(p90, cfg)).toBeCloseTo(100, 1);
+    expect(qualityScore(semBacklinks as Metrics, cfg)).toBeCloseTo(100, 1);
+    expect(qualityScore({ langlinks: cfg.quality.langlinks.ref }, cfg)).toBeCloseTo(
+      100,
+      1,
+    );
   });
 
   it("dá zero para artigo sem métrica nenhuma", () => {
     expect(qualityScore({}, cfg)).toBe(0);
+  });
+
+  it("sem métrica nenhuma, um artigo curado fica só com o bônus", () => {
+    expect(qualityScore({}, cfg, { curated: true })).toBe(cfg.curatedBonus.value);
   });
 
   it("aplica o bônus de fonte curada", () => {
@@ -85,11 +106,18 @@ describe("qualityScore", () => {
     expect(qualityScore(p90, cfg)).toBeCloseTo(100, 1);
   });
 
-  it("cada termo contribui exatamente o próprio peso no p90", () => {
-    // Sem a normalização, o peso nominal não correspondia à influência real:
-    // sections com peso 0,8 respondia por 1% da variância do score.
+  it("cada termo vale o próprio peso quando todos estão medidos", () => {
+    // Com tudo medido, levar uma métrica de zero ao seu p90 acrescenta
+    // exatamente peso×10 pontos. É isso que faz os pesos serem comparáveis
+    // entre si: antes da normalização, sections com peso 0,8 respondia por 1%
+    // da variância do score enquanto backlinks com 2,0 respondia por 29%.
+    const zeros = Object.fromEntries(
+      Object.keys(cfg.quality).map((n) => [n, 0]),
+    ) as Metrics;
+    expect(qualityScore(zeros, cfg)).toBe(0);
+
     for (const [nome, termo] of Object.entries(cfg.quality)) {
-      const so = qualityScore({ [nome]: termo.ref } as Metrics, cfg);
+      const so = qualityScore({ ...zeros, [nome]: termo.ref }, cfg);
       expect(so).toBeCloseTo(termo.weight * 10, 1);
     }
   });

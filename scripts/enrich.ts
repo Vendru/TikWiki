@@ -9,7 +9,17 @@
  * guardar o wikitext de todo mundo em memória antes de gravar consumiria
  * gigabytes, e uma interrupção custaria tudo que já foi buscado.
  *
- * Uso: npm run enrich -- [--limit=N] [--score-only] [--no-pageviews] [--refresh]
+ * Uso: npm run enrich -- [opções]
+ *   --no-backlinks   pula backlinks (1 request por artigo)
+ *   --no-pageviews   pula audiência (1 request por artigo, e é outra API)
+ *   --top=N          mede os N melhores pelo score que já existe
+ *   --limit=N        processa só os N primeiros, para validar rápido
+ *   --score-only     repontua sem tocar na rede
+ *   --refresh        ignora o cache de leitura
+ *
+ * Combinar --no-backlinks com --no-pageviews mede só o que vem em lote, ao
+ * custo de cerca de 0,07 request por artigo em vez de 2,07 — a diferença
+ * entre medir o pool inteiro e esbarrar no limite de taxa da API.
  */
 import { WIKI_LANG } from "../src/lib/config";
 import { WikiClient } from "../src/lib/wiki/client";
@@ -29,8 +39,20 @@ const args = process.argv.slice(2);
 const refresh = args.includes("--refresh");
 const scoreOnly = args.includes("--score-only");
 const skipPageviews = args.includes("--no-pageviews");
+const skipBacklinks = args.includes("--no-backlinks");
 const limitArg = args.find((a) => a.startsWith("--limit="));
 const limit = limitArg ? Number(limitArg.split("=")[1]) : undefined;
+const topArg = args.find((a) => a.startsWith("--top="));
+const top = topArg ? Number(topArg.split("=")[1]) : undefined;
+
+/**
+ * Backlinks e audiência custam um request por artigo; as demais métricas vêm
+ * em lotes de 20 a 50. Numa wiki grande essa diferença é de duas ordens de
+ * grandeza, e a API impõe limite de taxa muito antes de a corrida completa
+ * terminar. Daí as duas travas: dá para medir só o que é agrupável no pool
+ * inteiro, e depois completar os melhores.
+ */
+const custoPorArtigo = (skipBacklinks ? 0 : 1) + (skipPageviews ? 0 : 1) + 0.07;
 
 /** Artigos medidos e gravados por bloco. */
 const BLOCO = 500;
@@ -58,24 +80,46 @@ async function main() {
   const db = openDb();
   const scoreCfg = loadScoreConfig();
 
-  // Mede quem está faltando alguma coisa. Audiência ausente entra na conta:
-  // pode ser artigo sem histórico, mas o cache guarda também esse "sem dado",
-  // então reconsultar não custa rede — e a chave do cache inclui o mês, que é
-  // o que faz o número envelhecer junto com a realidade.
-  const where = scoreOnly ? "1=1" : "backlinks IS NULL OR pageviews IS NULL";
+  // Seleciona quem está faltando exatamente aquilo que esta corrida vai
+  // buscar — pedir por métrica que não será medida faria o trabalho girar em
+  // falso a cada execução. Audiência ausente entra na conta: pode ser artigo
+  // sem histórico, mas o cache guarda também esse "sem dado", e a chave do
+  // cache inclui o mês, que é o que faz o número envelhecer com a realidade.
+  const faltando = ["langlinks IS NULL", "refs IS NULL"];
+  if (!skipBacklinks) faltando.push("backlinks IS NULL");
+  if (!skipPageviews) faltando.push("pageviews IS NULL");
+  const where = scoreOnly ? "1=1" : faltando.join(" OR ");
+
+  // Com --top, mede primeiro os melhores pelo score que já existe. É como a
+  // segunda etapa escolhe onde gastar o request por artigo.
+  const ordem = top
+    ? "score_quality DESC NULLS LAST, curated DESC"
+    : "curated DESC, page_id";
+  const teto = top ?? limit;
+
   const rows = db
     .prepare(
       `SELECT page_id, title, bytes, langlinks, backlinks, refs, images,
               sections, pageviews, curated
          FROM articles WHERE lang = ? AND ${where}
-         ORDER BY curated DESC, page_id
-         ${limit ? `LIMIT ${Number(limit)}` : ""}`,
+         ORDER BY ${ordem}
+         ${teto ? `LIMIT ${Number(teto)}` : ""}`,
     )
     .all(lang) as Row[];
 
   console.log(
-    `${scoreOnly ? "Repontuando" : "Enriquecendo"} ${rows.length} artigos — ${lang}\n`,
+    `${scoreOnly ? "Repontuando" : "Enriquecendo"} ${rows.length} artigos — ${lang}`,
   );
+  if (!scoreOnly) {
+    const medidas = ["langlinks", "imagens", "refs", "seções"];
+    if (!skipBacklinks) medidas.push("backlinks");
+    if (!skipPageviews) medidas.push("audiência");
+    console.log(`Métricas: ${medidas.join(", ")}`);
+    console.log(
+      `Custo estimado: ~${Math.round(rows.length * custoPorArtigo).toLocaleString("pt-BR")} requests`,
+    );
+  }
+  console.log("");
   if (rows.length === 0) {
     console.log("Nada a fazer.");
     finalizeDb(db);
@@ -134,7 +178,10 @@ async function main() {
     if (!scoreOnly) {
       const props = await fetchCountedProps(client, titulos);
       const wikitexts = await fetchWikitext(client, titulos);
-      const backlinks = await fetchBacklinks(client, titulos);
+
+      const backlinks = skipBacklinks
+        ? new Map<string, number>()
+        : await fetchBacklinks(client, titulos);
 
       const views = new Map<string, number>();
       if (!skipPageviews) {
@@ -149,7 +196,9 @@ async function main() {
         medidas.set(t, {
           langlinks: props.langlinks.get(t) ?? 0,
           images: props.images.get(t) ?? 0,
-          backlinks: backlinks.get(t) ?? 0,
+          // Não medido fica nulo, e não zero: o score desconta o peso da
+          // métrica ausente em vez de tratá-la como "não tem nenhum".
+          backlinks: skipBacklinks ? null : (backlinks.get(t) ?? 0),
           refs: w ? countRefs(w) : null,
           sections: w ? countSections(w) : null,
           pageviews: views.get(t) ?? null,

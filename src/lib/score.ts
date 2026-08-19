@@ -61,19 +61,37 @@ const normalized = (value: number, term: Term) => {
   return compress(value, term.scale) / denominator;
 };
 
+/**
+ * Qualidade na escala de 0 a 100, onde 100 é o p90 de todas as métricas.
+ *
+ * O total é dividido pelo peso das métricas de fato presentes, não pelo peso
+ * total. Sem isso, artigo com métrica faltando pontuaria sistematicamente
+ * abaixo de quem tem tudo — e como medir backlinks e audiência custa um
+ * request por artigo, essa diferença de cobertura é a regra, não a exceção.
+ *
+ * Métrica ausente e métrica zero passam a ser coisas diferentes, que é o
+ * certo: `refs: null` é "não medimos" e sai da conta; `refs: 0` é "medimos e
+ * não há nenhuma", e puxa a média para baixo.
+ */
 export function qualityScore(
   m: Metrics,
   cfg: ScoreConfig,
   opts: { curated?: boolean } = {},
 ): number {
   let total = 0;
+  let pesoDisponivel = 0;
+
   for (const [name, term] of Object.entries(cfg.quality)) {
     const raw = m[name as keyof Metrics];
     if (raw === null || raw === undefined) continue;
+    pesoDisponivel += term.weight;
     total += term.weight * normalized(raw, term);
   }
-  // Com os pesos somando 10, um artigo no p90 de tudo dá exatamente 100.
-  const score = total * 10 + (opts.curated ? cfg.curatedBonus.value : 0);
+
+  const bonus = opts.curated ? cfg.curatedBonus.value : 0;
+  if (pesoDisponivel === 0) return Math.round(bonus * 100) / 100;
+
+  const score = (total / pesoDisponivel) * 100 + bonus;
   return Math.round(score * 100) / 100;
 }
 
