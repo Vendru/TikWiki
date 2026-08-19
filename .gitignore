@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Cache das respostas cruas da API: local, recriável, grande.
+.cache/
+
+# O pool (data/pool.db) é commitado de propósito, como artefato de build.
+# Os arquivos auxiliares do WAL não são.
+data/*.db-wal
+data/*.db-shm
+
+.env
+.env.local
+.DS_Store
