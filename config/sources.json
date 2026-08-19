@@ -1,0 +1,21 @@
+{
+  "$comment": "Fontes de candidatos por idioma. Títulos aqui são pontos de partida verificados via API na execução — se um não existir, a ingestão falha e sugere alternativas encontradas na busca, em vez de seguir com um pool vazio.",
+  "unusual": {
+    "en": {
+      "hub": "Wikipedia:Unusual articles",
+      "searchHint": "unusual articles",
+      "excludeSubpages": [
+        "/Removed",
+        "/Categories",
+        "/Questions",
+        "/Lists",
+        "/Other pages"
+      ]
+    },
+    "pt": {
+      "hub": "Wikipédia:Artigos peculiares",
+      "searchHint": "artigos peculiares",
+      "excludeSubpages": []
+    }
+  }
+}
