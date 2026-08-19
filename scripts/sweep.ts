@@ -164,7 +164,7 @@ async function main() {
   const backlinks = await fetchBacklinks(
     client,
     passed.map((t) => facts.get(t)!.title),
-    500,
+    undefined,
     progress("backlinks"),
   );
   console.log("");

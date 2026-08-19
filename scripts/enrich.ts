@@ -95,7 +95,7 @@ async function main() {
     console.log("\n\nWikitext (refs e seções)");
     const wikitexts = await fetchWikitext(client, titles, progress("wikitext"));
     console.log("\n\nBacklinks");
-    const backlinks = await fetchBacklinks(client, titles, 500, progress("backlinks"));
+    const backlinks = await fetchBacklinks(client, titles, undefined, progress("backlinks"));
     console.log("");
 
     const views = new Map<string, number>();

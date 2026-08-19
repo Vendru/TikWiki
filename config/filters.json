@@ -17,21 +17,16 @@
 
   "$titlePatterns": "Regex aplicadas ao título, sem diferenciar maiúsculas. Cada chave vira uma linha no relatório.",
   "titlePatterns": {
-    "lista": [
-      "^Lists? of ",
-      "^Index of ",
-      "^Outline of ",
-      "^Glossary of ",
-      "^Bibliography of ",
-      "^Timeline of "
-    ],
+    "$lista": "Não inclui '^Timeline of' nem '^Glossary of': testados contra os 4.202 artigos curados, matavam 'Timeline of the far future' e 'Glossary of Wobbly terms', e no sweep essas duas formas quase não aparecem. O ganho não paga a perda.",
+    "lista": ["^Lists? of ", "^Index of ", "^Outline of ", "^Bibliography of "],
     "desambiguacao": ["\\(disambiguation\\)$", "\\(disambigua[çc][ãa]o\\)$"],
     "ano_isolado": ["^\\d{1,4}$", "^\\d{1,4} (BC|AD)$", "^\\d{4}s$"],
+    "$evento_datado": "Exige o ano E uma palavra de recorrência. Antes bastava começar com quatro dígitos ou terminar em 'of YYYY', e isso derrubava 68 artigos curados — 'Dancing plague of 1518', '2016 clown sightings', '1985 Austrian diethylene glycol wine scandal'. O alvo é a fatia anual de rotina, não o evento histórico que tem ano no nome.",
     "evento_datado": [
-      " (in|of) \\d{4}$",
-      " (em|de) \\d{4}$",
-      "^\\d{4}[–-]\\d{2,4} ",
-      "^\\d{4} "
+      " in \\d{4}$",
+      " em \\d{4}$",
+      "^\\d{4}[–-]\\d{2,4} .*\\b(season|championship|cup|league|series)\\b",
+      "^\\d{4} .*\\b(election|elections|census|Grand Prix|Olympics|Olympic Games|World Cup|championship|championships|tournament|Games|season|draft)\\b"
     ],
     "temporada_esportiva": [
       " season$",

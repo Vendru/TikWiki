@@ -20,11 +20,11 @@ sorteando desse pool, e o filtro, o score e a varredura ampla.
 
 | Métrica | Valor |
 | --- | --- |
-| Artigos no pool (`en`) | 4.329 |
-| Da lista curada / da varredura | 4.202 / 127 |
-| Com resumo | 4.329 (100%) |
+| Artigos no pool (`en`) | 4.330 |
+| Da lista curada / da varredura | 4.202 / 128 |
+| Com resumo | 4.330 (100%) |
 | Com nota do curador | 4.151 |
-| Com métricas e score | 4.329 (100%) |
+| Com métricas e score | 4.330 (100%) |
 | Tamanho do arquivo | ~7 MB |
 
 ## Como rodar
@@ -193,13 +193,13 @@ calibrar as regras em `config/filters.json` na mão.
 | regra | derrubou |
 | --- | --- |
 | `bytes_minimo` | 51,9% |
-| `prosa_insuficiente` | 15,5% |
+| `prosa_insuficiente` | 16,1% |
 | `desambiguacao_pageprop` | 5,4% |
-| `titulo:evento_datado` | 3,6% |
+| `titulo:evento_datado` | 2,3% |
 | `esboco` | 2,5% |
 | `categoria:localidades` | 2,3% |
-| demais regras | 2,7% |
-| **aprovados** | **16,0%** |
+| demais regras | 3,4% |
+| **aprovados** | **16,1%** |
 
 O corte de bytes derrubou 51,9%, contra os 56,1% previstos na calibração — a
 previsão se sustentou.
@@ -225,44 +225,103 @@ Isso está registrado como achado, não como pendência resolvida: mexer nos pes
 não conserta, porque o problema é a escolha das métricas, não a ponderação
 delas. Ver "Decisões em aberto".
 
+### Falsos positivos, medidos contra o conjunto-ouro
+
+Os 4.202 artigos da lista curada são artigos comprovadamente interessantes,
+aprovados por pessoas. Rodar o filtro contra eles mede o que ele destrói — em
+produção esses artigos passam direto, mas uma regra que os derruba derruba
+também o artigo equivalente que a varredura encontraria.
+
+O primeiro resultado foi 17,5%, e revelou duas regras largas demais:
+
+| regra | antes | agora |
+| --- | --- | --- |
+| `titulo:evento_datado` | 68 | 19 |
+| `titulo:lista` | 3 | 0 |
+| `titulo:discografia_elenco` | 2 | 2 |
+| **total fora o corte de bytes** | **73 (1,7%)** | **21 (0,50%)** |
+
+`^\d{4} ` e ` of \d{4}$` matavam "Dancing plague of 1518", "2016 clown
+sightings" e "1985 Austrian diethylene glycol wine scandal" — o alvo era a
+fatia anual de rotina, não o evento histórico que tem ano no nome. A regra
+passou a exigir o ano **e** uma palavra de recorrência. `^Timeline of` matava
+"Timeline of the far future", e saiu.
+
+Os 19 restantes são eleições, que a regra deve mesmo pegar. A correção custou
+**1 artigo de lixo a mais** numa varredura de 800: as outras regras cobrem o
+que a de título pegava demais.
+
+O corte de bytes responde pelo resto (664, 15,8%), que é o trade-off já
+escolhido na calibração do limiar, não um defeito novo.
+
 ### Calibração dos scores
 
-Duas decisões que os dados do pool medido resolveram, uma delas contra a
-expectativa.
+**Cada termo é normalizado pelo seu p90**, e é isso que faz o peso significar o
+que aparenta. Sem a normalização os pesos enganavam: como cada métrica tem
+dispersão própria depois do log, o peso nominal não correspondia à influência
+real.
 
-**Bônus de curadoria: 15.** A suposição era que a varredura ampla afogaria os
-artigos peculiares e que o bônus existiria para alcançar paridade. É o
-contrário — os curados vencem em todos os percentis mesmo sem bônus:
+| termo | peso | variância antes | variância depois |
+| --- | --- | --- | --- |
+| backlinks | 3,0 | 29% | 12% |
+| langlinks | 2,5 | 8% | 11% |
+| refs | 2,0 | 5% | 4% |
+| sections | 1,0 | 1% | 1% |
+| bytes | 1,0 | 2% | 1% |
+| images | 0,5 | 1% | 0% |
+
+`sections` com peso 0,8 respondia por 1% do resultado e `backlinks` correlacionava
+0,85 com o score final: na prática a fórmula era "backlinks mais ruído". Com os
+pesos somando 10, um artigo no p90 de tudo dá exatamente 100.
+
+**bytes, refs e sections são colineares** — 0,83 entre bytes e sections, 0,78
+entre bytes e refs. Somam 4,0 de propósito e não mais, para o comprimento não
+ser contado três vezes. `backlinks` e `langlinks` são os sinais mais
+independentes e levam o maior peso. `images` leva o menor: `prop=images` conta
+também os ícones de template, como `File:Commons-logo.svg`.
+
+**O teto de backlinks subiu de 500 para 2000.** Com 500, 5,7% do pool saturava
+e o p99 inteiro valia exatamente 500 — justamente os artigos que o ranking
+precisa separar. Agora satura 0,3%, e o custo é baixo porque a paginação para
+no teto.
+
+**Bônus de curadoria: 15.** A suposição era que a varredura afogaria os artigos
+peculiares e que o bônus existiria para alcançar paridade. É o contrário — os
+curados vencem em todos os percentis mesmo sem bônus:
 
 | percentil | curado (sem bônus) | varredura |
 | --- | --- | --- |
-| p25 | 65,7 | 56,8 |
-| p50 | 85,1 | 71,7 |
-| p75 | 104,0 | 89,0 |
-| p90 | 119,4 | 113,0 |
+| p25 | 51,0 | 43,8 |
+| p50 | 65,7 | 52,9 |
+| p75 | 80,0 | 66,6 |
+| p90 | 92,0 | 86,8 |
 
 A lista peculiar também favorece artigo bem desenvolvido, não só estranho.
-Então o bônus não serve para empatar, e sim para valer o que o score não mede.
-15 põe a mediana dos curados em 100,1, entre o p75 e o p90 da varredura: um
-artigo curado típico bate cerca de 80% dela.
+O bônus então não serve para empatar, e sim para valer o que o score não mede.
+15 põe a mediana curada em 80,7, entre o p75 e o p90 da varredura.
 
-**Peso da audiência na surpresa: 3,0.** Calibrado olhando o topo do ranking a
+**Peso da audiência na surpresa: 10.** Calibrado olhando o topo do ranking a
 cada peso:
 
 | peso | topo do ranking |
 | --- | --- |
-| 1,8 | 4 dos 6 primeiros com mais de 10 mil visualizações, incluindo "Human" |
-| **3,0** | **nenhum acima de 10 mil; "Argel Fuchs", "FC Slutsk"** |
-| 4,5 | "Boxing at the 1924 Summer Olympics – Middleweight" |
-| 6,0 | "Roy Fowler (Paralympian)" |
+| 3 | "Human", "American Samoa", "Christmas Island" — todos famosos |
+| 8 | ainda 3 dos 5 acima de 10 mil visualizações |
+| **10** | **"Argel Fuchs", "COVID-19 pandemic in Antarctica"** |
+| 12 | "Pakistan Muslim League – Functional" |
 
-3,0 é o joelho. Acima dele o score deixa de premiar descoberta e passa a
-perseguir obscuridade pura — que correlaciona com tédio, e é a mesma limitação
-da seção anterior vista pela outra ponta.
+Mesmo no joelho o topo é misto: "COVID-19 pandemic in Antarctica" convive com
+"FC Slutsk". Nenhum peso conserta isso, porque audiência baixa mede
+desconhecimento, não curiosidade — o mesmo limite da seção anterior.
 
-Com esse peso, 53% do pool fica com surpresa negativa. É um score relativo e
-isso é esperado, mas **o sorteio ponderado da etapa 4 precisa deslocar a escala
-antes de usar `score_surprise` como peso**.
+Com esse peso, 49% do pool fica com surpresa negativa. É esperado num score
+relativo, mas **o sorteio ponderado da etapa 4 precisa deslocar a escala antes
+de usar `score_surprise` como peso**.
+
+> Depois de mexer em qualquer peso, rode `npm run enrich -- --score-only`
+> **antes** de medir distribuições. O `enrich` só reescreve as linhas que
+> remede, então sem esse passo as estatísticas misturam fórmulas — foi o que
+> levou a uma primeira calibração errada do peso da surpresa.
 
 ## Schema
 

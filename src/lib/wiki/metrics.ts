@@ -126,12 +126,16 @@ export async function fetchCountedProps(
  * Conta quantos artigos apontam para cada título, com teto.
  *
  * O teto existe porque a contagem exata de um artigo muito linkado custaria
- * dezenas de continuações e não muda o score: o log já comprime essa faixa.
+ * dezenas de continuações e o log já comprime essa faixa. Mas ele não pode
+ * ficar perto do topo da distribuição: com teto de 500, 5,7% do pool saturava
+ * e o p99 inteiro valia exatamente 500 — justamente os artigos que o ranking
+ * precisa separar. 2000 deixa a saturação abaixo de 1% e só custa requests
+ * extras para os poucos que passam de 500, porque a paginação para no teto.
  */
 export async function fetchBacklinks(
   client: WikiClient,
   titles: string[],
-  cap = 500,
+  cap = 2000,
   onBatch?: (done: number, total: number) => void,
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();

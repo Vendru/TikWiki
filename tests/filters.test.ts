@@ -15,6 +15,15 @@ describe("config de filtros", () => {
     expect(f.title.length).toBeGreaterThan(0);
     expect(f.category.length).toBeGreaterThan(0);
   });
+
+  it("ignora as chaves de documentação em vez de tratá-las como regra", () => {
+    // A config guarda o racional junto do padrão, com chaves iniciadas por $.
+    // Compilá-las quebrava o carregamento inteiro.
+    const nomes = [...f.title, ...f.category].map((g) => g.rule);
+    expect(nomes.some((n) => n.startsWith("$"))).toBe(false);
+    expect(nomes).toContain("lista");
+    expect(nomes).toContain("localidades");
+  });
 });
 
 describe("reject — regras baratas", () => {
@@ -42,12 +51,11 @@ describe("reject — padrões de título", () => {
     ["Lists of lists", "titulo:lista"],
     ["Index of philosophy articles", "titulo:lista"],
     ["Outline of chess", "titulo:lista"],
+    ["Bibliography of Winston Churchill", "titulo:lista"],
     ["Mercury (disambiguation)", "titulo:desambiguacao"],
     ["1997", "titulo:ano_isolado"],
     ["44 BC", "titulo:ano_isolado"],
     ["1990s", "titulo:ano_isolado"],
-    ["Politics in 2011", "titulo:evento_datado"],
-    ["2011 Formula One season", "titulo:evento_datado"],
     ["Copa do Mundo em 1970", "titulo:evento_datado"],
     ["Michael Jackson discography", "titulo:discografia_elenco"],
   ];
@@ -61,6 +69,37 @@ describe("reject — padrões de título", () => {
   it("não confunde título legítimo que contém número", () => {
     expect(reject({ ...base, title: "Apollo 11" }, f)).toBeUndefined();
     expect(reject({ ...base, title: "Catch-22" }, f)).toBeUndefined();
+  });
+
+  it("poupa evento histórico que tem ano no nome", () => {
+    // Todos estes eram derrubados por '^\\d{4} ' e ' of \\d{4}$', regras largas
+    // demais: são artigos aprovados pela curadoria e do tipo que o produto
+    // existe para entregar.
+    for (const title of [
+      "Dancing plague of 1518",
+      "2016 clown sightings",
+      "1985 Austrian diethylene glycol wine scandal",
+      "1593 transported soldier legend",
+      "1904 Olympic marathon",
+    ]) {
+      expect(reject({ ...base, title }, f)).toBeUndefined();
+    }
+  });
+
+  it("ainda derruba a fatia anual de rotina", () => {
+    for (const title of [
+      "2011 Formula One season",
+      "1876 United States presidential election",
+      "2011–12 Premier League season",
+      "Politics in 2011",
+    ]) {
+      expect(reject({ ...base, title }, f)).toBe("titulo:evento_datado");
+    }
+  });
+
+  it("poupa cronologia e glossário, que podem ser substanciais", () => {
+    expect(reject({ ...base, title: "Timeline of the far future" }, f)).toBeUndefined();
+    expect(reject({ ...base, title: "Glossary of Wobbly terms" }, f)).toBeUndefined();
   });
 
   it("não derruba artigo cujo nome apenas começa com maiúscula parecida", () => {

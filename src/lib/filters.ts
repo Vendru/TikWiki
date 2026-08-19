@@ -11,8 +11,9 @@ import { CONFIG_DIR } from "./config";
 export interface FilterConfig {
   minBytes: { value: number };
   minProseRatio: { value: number };
-  titlePatterns: Record<string, string[]>;
-  categoryPatterns: Record<string, string[]>;
+  // Os grupos aceitam também chaves `$…` de documentação, descartadas ao compilar.
+  titlePatterns: Record<string, unknown>;
+  categoryPatterns: Record<string, unknown>;
   stubPatterns: string[];
   fichaPatterns: string[];
 }
@@ -26,11 +27,20 @@ export interface CompiledFilters {
   ficha: RegExp[];
 }
 
-const compileGroup = (groups: Record<string, string[]>) =>
-  Object.entries(groups).map(([rule, patterns]) => ({
-    rule,
-    patterns: patterns.map((p) => new RegExp(p, "i")),
-  }));
+/**
+ * Compila os grupos de regex, ignorando as chaves iniciadas por `$`.
+ *
+ * A config usa esse prefixo para o racional de cada regra — o porquê precisa
+ * morar junto do padrão, senão a calibração vira folclore. Elas não são
+ * regras e não podem entrar na compilação.
+ */
+const compileGroup = (groups: Record<string, unknown>) =>
+  Object.entries(groups)
+    .filter(([rule, patterns]) => !rule.startsWith("$") && Array.isArray(patterns))
+    .map(([rule, patterns]) => ({
+      rule,
+      patterns: (patterns as string[]).map((p) => new RegExp(p, "i")),
+    }));
 
 export function compileFilters(cfg: FilterConfig): CompiledFilters {
   return {

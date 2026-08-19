@@ -12,12 +12,14 @@ import { CONFIG_DIR } from "./config";
 export interface Term {
   weight: number;
   scale: number;
+  /** Valor de referência (p90 do pool) que faz o termo valer exatamente `weight`. */
+  ref: number;
 }
 
 export interface ScoreConfig {
   quality: Record<string, Term>;
   curatedBonus: { value: number };
-  surprise: { pageviewsWeight: number; pageviewsScale: number };
+  surprise: { pageviewsWeight: number; pageviewsScale: number; pageviewsRef: number };
 }
 
 export function loadScoreConfig(): ScoreConfig {
@@ -43,6 +45,22 @@ export interface Metrics {
 const compress = (value: number, scale: number) =>
   Math.log10(1 + Math.max(0, value) / scale);
 
+/**
+ * Normaliza o termo pelo seu valor de referência, para que o peso signifique
+ * o que aparenta significar.
+ *
+ * Sem isso os pesos enganam: como cada métrica tem uma dispersão própria
+ * depois do log, `sections` com peso 0,8 respondia por 1% da variância do
+ * score enquanto `backlinks` com peso 2,0 respondia por 29%. Dividindo pelo
+ * log da referência, um artigo no p90 daquela métrica contribui exatamente
+ * `weight`, e os pesos passam a ser comparáveis entre si.
+ */
+const normalized = (value: number, term: Term) => {
+  const denominator = compress(term.ref, term.scale);
+  if (!(denominator > 0)) return 0;
+  return compress(value, term.scale) / denominator;
+};
+
 export function qualityScore(
   m: Metrics,
   cfg: ScoreConfig,
@@ -52,8 +70,9 @@ export function qualityScore(
   for (const [name, term] of Object.entries(cfg.quality)) {
     const raw = m[name as keyof Metrics];
     if (raw === null || raw === undefined) continue;
-    total += term.weight * compress(raw, term.scale);
+    total += term.weight * normalized(raw, term);
   }
+  // Com os pesos somando 10, um artigo no p90 de tudo dá exatamente 100.
   const score = total * 10 + (opts.curated ? cfg.curatedBonus.value : 0);
   return Math.round(score * 100) / 100;
 }
@@ -73,7 +92,11 @@ export function surpriseScore(
   const penalty =
     cfg.surprise.pageviewsWeight *
     10 *
-    compress(m.pageviews, cfg.surprise.pageviewsScale);
+    normalized(m.pageviews, {
+      weight: 1,
+      scale: cfg.surprise.pageviewsScale,
+      ref: cfg.surprise.pageviewsRef,
+    });
   return Math.round((quality - penalty) * 100) / 100;
 }
 

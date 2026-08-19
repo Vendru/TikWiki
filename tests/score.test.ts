@@ -64,9 +64,6 @@ describe("qualityScore", () => {
   });
 
   it("o bônus fecha a distância mediana entre curados e varredura ampla", () => {
-    // Calibrado contra a distribuição real dos dois conjuntos: sem isso a
-    // varredura ampla afogaria os artigos peculiares, que são o melhor
-    // conteúdo do pool. O valor vem de config/score.json.
     const medianaCurado = qualityScore(
       { bytes: 13580, langlinks: 11, backlinks: 44, refs: 15, sections: 5, images: 3 },
       cfg,
@@ -77,6 +74,34 @@ describe("qualityScore", () => {
       cfg,
     );
     expect(medianaCurado).toBeGreaterThan(medianaVarredura);
+  });
+
+  it("um artigo no p90 de todas as métricas vale 100", () => {
+    // É o que a normalização compra: a escala passa a ter significado, em vez
+    // de depender da dispersão que cada métrica tem depois do log.
+    const p90 = Object.fromEntries(
+      Object.entries(cfg.quality).map(([nome, termo]) => [nome, termo.ref]),
+    ) as Metrics;
+    expect(qualityScore(p90, cfg)).toBeCloseTo(100, 1);
+  });
+
+  it("cada termo contribui exatamente o próprio peso no p90", () => {
+    // Sem a normalização, o peso nominal não correspondia à influência real:
+    // sections com peso 0,8 respondia por 1% da variância do score.
+    for (const [nome, termo] of Object.entries(cfg.quality)) {
+      const so = qualityScore({ [nome]: termo.ref } as Metrics, cfg);
+      expect(so).toBeCloseTo(termo.weight * 10, 1);
+    }
+  });
+
+  it("os pesos somam 10, para o p90 geral dar 100", () => {
+    const soma = Object.values(cfg.quality).reduce((s, t) => s + t.weight, 0);
+    expect(soma).toBeCloseTo(10, 5);
+  });
+
+  it("uma métrica acima da referência ultrapassa o próprio peso", () => {
+    const t = cfg.quality.backlinks;
+    expect(qualityScore({ backlinks: t.ref * 10 }, cfg)).toBeGreaterThan(t.weight * 10);
   });
 });
 
