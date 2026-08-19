@@ -164,6 +164,66 @@ custa um scan barato, e não vale inventar amostragem que vai ser substituída.
 
 Nenhuma rota chama a API da Wikipédia durante o request.
 
+## Filtro, score e varredura ampla
+
+```bash
+npm run sweep -- --n=800          # sorteia, filtra, mede e grava
+npm run enrich                    # mede quem ainda não tem métrica
+npm run enrich -- --score-only    # repontua o pool sem tocar na rede
+```
+
+O `sweep` roda em funil, na ordem de custo das regras. Cada etapa só processa
+quem passou pela anterior, porque a maior parte dos candidatos morre nas regras
+baratas e não vale pagar wikitext nem audiência por eles:
+
+| etapa | o que busca | custo |
+| --- | --- | --- |
+| 1 | tamanho, namespace, desambiguação | 1 request / 20 títulos |
+| 2 | categorias, langlinks, imagens | 1 request / 50 títulos |
+| 3 | wikitext (esboço, prosa, refs, seções) | 1 request / 20 títulos |
+| 4 | backlinks | 1 request / artigo |
+| 5 | audiência | 1 request / artigo |
+
+Ao final imprime quantos itens cada regra derrubou — é o instrumento para
+calibrar as regras em `config/filters.json` na mão.
+
+### O que a varredura de 800 artigos mostrou
+
+| regra | derrubou |
+| --- | --- |
+| `bytes_minimo` | 51,9% |
+| `prosa_insuficiente` | 15,5% |
+| `desambiguacao_pageprop` | 5,4% |
+| `titulo:evento_datado` | 3,6% |
+| `esboco` | 2,5% |
+| `categoria:localidades` | 2,3% |
+| demais regras | 2,7% |
+| **aprovados** | **16,0%** |
+
+O corte de bytes derrubou 51,9%, contra os 56,1% previstos na calibração — a
+previsão se sustentou.
+
+### O limite do filtro
+
+O filtro remove lixo com eficácia, mas **o que sobra é válido e sem graça**, que
+não é a mesma coisa que interessante. A varredura aprovou "Welland Canal Bridge
+13", "The Leamington Post" e "Transport in Bedford": nenhum é lixo, nenhum é
+motivo para abrir o site.
+
+O score piora o quadro em vez de resolver. Ordenado por `score_quality`, o topo
+da varredura é "Urban sprawl", "Public administration" e "Croatia–Serbia
+relations". A fórmula soma backlinks, langlinks, refs e seções, e essas métricas
+medem **peso enciclopédico**, que é quase o oposto de curiosidade: um assunto é
+muito linkado justamente por ser fundamental e conhecido.
+
+Para comparar, a lista curada entrega "Bog snorkelling", "52-hertz whale" e
+"Toynbee tiles" — vindos de julgamento humano sobre o que é peculiar, sinal que
+nenhuma métrica estrutural captura.
+
+Isso está registrado como achado, não como pendência resolvida: mexer nos pesos
+não conserta, porque o problema é a escolha das métricas, não a ponderação
+delas. Ver "Decisões em aberto".
+
 ## Schema
 
 `articles` tem chave `(lang, page_id)` e índice único em `(lang, title)`. As
@@ -183,12 +243,23 @@ para saber a idade e a procedência do pool.
 O texto dos artigos vem da Wikipédia sob CC BY-SA 4.0. O app precisa exibir a
 atribuição e o link para o artigo original, como a licença exige.
 
+## Decisões em aberto
+
+**A fórmula do score é uma proposta, não a especificada.** A baseline não
+chegou na especificação, então os pesos em `config/score.json` foram escolhidos
+aqui, com o racional de cada termo registrado no próprio arquivo.
+
+**A varredura ampla entrega volume, não curiosidade.** Pelo que a amostra
+mostra, o custo-benefício dela é ruim comparado às fontes curadas que ainda não
+foram implementadas — em especial o arquivo do "Você sabia?", que é justamente
+um acervo de fatos curiosos selecionados por pessoas. Vale considerar
+implementá-lo antes de investir mais na varredura.
+
+**Tamanho do `data/pool.db`.** Hoje são ~7 MB. A varredura ampla em escala pode
+levar o pool a centenas de MB, e cada reingestão vira um blob novo no histórico
+do git.
+
 ## Próximas etapas
 
-3. Filtro de exclusão, score e varredura ampla
 4. Tópicos e modos de sorteio
 5. Script de calibração
-
-Na etapa 3 é preciso decidir o que fazer com o tamanho do `data/pool.db`: hoje
-são 6,8 MB, mas a varredura ampla pode levar o pool a centenas de MB, e cada
-reingestão vira um blob novo no histórico do git.

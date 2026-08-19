@@ -1,0 +1,51 @@
+{
+  "$comment": "Pesos do score. PROPOSTA — a baseline não chegou na especificação, então esta fórmula foi escolhida aqui e precisa da sua revisão. Tudo é dado editável; scripts/score.ts recalcula o pool inteiro sem tocar na rede.",
+
+  "$formula": "score_quality = soma(peso_i * log10(1 + metrica_i / escala_i)) * 10, mais o bônus de fonte curada. O log comprime a cauda longa: um artigo com 50.000 backlinks não é 50x melhor que um com 1.000, e sem o log ele dominaria o pool inteiro.",
+
+  "quality": {
+    "backlinks": {
+      "weight": 2.0,
+      "scale": 1,
+      "$why": "Quantos artigos apontam para ele. É o sinal mais forte de que o assunto é parte do tecido da enciclopédia, e não um item solto."
+    },
+    "langlinks": {
+      "weight": 1.5,
+      "scale": 1,
+      "$why": "Em quantos idiomas existe. Notabilidade que atravessa culturas, difícil de forjar."
+    },
+    "refs": {
+      "weight": 1.2,
+      "scale": 1,
+      "$why": "Densidade de fontes. Separa o artigo pesquisado do escrito de memória."
+    },
+    "sections": {
+      "weight": 0.8,
+      "scale": 1,
+      "$why": "Estrutura. Um artigo com seções foi desenvolvido, não despejado."
+    },
+    "images": {
+      "weight": 0.6,
+      "scale": 1,
+      "$why": "Peso baixo de propósito: imagem ajuda o card, mas é o sinal mais fácil de inflar."
+    },
+    "bytes": {
+      "weight": 1.0,
+      "scale": 1000,
+      "$why": "Tamanho em milhares de bytes. Já foi usado como corte no filtro; aqui entra só como gradiente."
+    }
+  },
+
+  "curatedBonus": {
+    "value": 12.0,
+    "$why": "Artigo aprovado pela curadoria humana entra acima da varredura ampla mesmo com métricas modestas — é exatamente o caso do artigo peculiar, curto e pouco linkado, que é o coração do produto."
+  },
+
+  "surprise": {
+    "pageviewsWeight": 1.8,
+    "pageviewsScale": 1,
+    "$formula": "score_surprise = score_quality - pageviewsWeight * 10 * log10(1 + pageviews / pageviewsScale)",
+    "$why": "Qualidade alta com pouca audiência é onde mora a sensação de descoberta; artigo popular o usuário provavelmente já conhece. O peso é maior que o de qualquer métrica isolada de qualidade para que a audiência de fato mova o ranking, mas não tão alto que só sobre artigo obscuro e ruim.",
+    "$pageviewsAusente": "Sem dado de audiência, surprise cai para quality: não dá para afirmar que é obscuro."
+  }
+}

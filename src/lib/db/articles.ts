@@ -9,6 +9,14 @@ export interface ArticleRecord {
   thumbnailUrl?: string;
   curatorNote?: string;
   bytes?: number;
+  langlinks?: number;
+  backlinks?: number;
+  refs?: number;
+  images?: number;
+  sections?: number;
+  pageviews?: number;
+  scoreQuality?: number;
+  scoreSurprise?: number;
   source: string;
   sourceDetail?: string;
   curated: boolean;
@@ -22,10 +30,14 @@ export function upsertArticles(db: DB, rows: ArticleRecord[]): number {
   const stmt = db.prepare(`
     INSERT INTO articles (
       lang, page_id, title, url, extract, thumbnail_url, curator_note,
-      bytes, source, source_detail, curated, updated_at
+      bytes, langlinks, backlinks, refs, images, sections, pageviews,
+      score_quality, score_surprise,
+      source, source_detail, curated, updated_at
     ) VALUES (
       @lang, @pageId, @title, @url, @extract, @thumbnailUrl, @curatorNote,
-      @bytes, @source, @sourceDetail, @curated, @updatedAt
+      @bytes, @langlinks, @backlinks, @refs, @images, @sections, @pageviews,
+      @scoreQuality, @scoreSurprise,
+      @source, @sourceDetail, @curated, @updatedAt
     )
     ON CONFLICT (lang, page_id) DO UPDATE SET
       title         = excluded.title,
@@ -34,6 +46,14 @@ export function upsertArticles(db: DB, rows: ArticleRecord[]): number {
       thumbnail_url = COALESCE(excluded.thumbnail_url, articles.thumbnail_url),
       curator_note  = COALESCE(excluded.curator_note, articles.curator_note),
       bytes         = COALESCE(excluded.bytes, articles.bytes),
+      langlinks     = COALESCE(excluded.langlinks, articles.langlinks),
+      backlinks     = COALESCE(excluded.backlinks, articles.backlinks),
+      refs          = COALESCE(excluded.refs, articles.refs),
+      images        = COALESCE(excluded.images, articles.images),
+      sections      = COALESCE(excluded.sections, articles.sections),
+      pageviews     = COALESCE(excluded.pageviews, articles.pageviews),
+      score_quality  = COALESCE(excluded.score_quality, articles.score_quality),
+      score_surprise = COALESCE(excluded.score_surprise, articles.score_surprise),
       -- Uma fonte curada nunca é rebaixada por uma varredura ampla posterior.
       source        = CASE WHEN articles.curated = 1 THEN articles.source
                           ELSE excluded.source END,
@@ -56,6 +76,14 @@ export function upsertArticles(db: DB, rows: ArticleRecord[]): number {
         thumbnailUrl: r.thumbnailUrl ?? null,
         curatorNote: r.curatorNote ?? null,
         bytes: r.bytes ?? null,
+        langlinks: r.langlinks ?? null,
+        backlinks: r.backlinks ?? null,
+        refs: r.refs ?? null,
+        images: r.images ?? null,
+        sections: r.sections ?? null,
+        pageviews: r.pageviews ?? null,
+        scoreQuality: r.scoreQuality ?? null,
+        scoreSurprise: r.scoreSurprise ?? null,
         source: r.source,
         sourceDetail: r.sourceDetail ?? null,
         curated: r.curated ? 1 : 0,
