@@ -1,9 +1,13 @@
 /**
- * Coleta as métricas que faltam e recalcula os scores do pool inteiro.
+ * Coleta as métricas que faltam e recalcula os scores do pool.
  *
  * Separado da ingestão de propósito: as fontes trazem os artigos, este script
  * os mede. Assim dá para recalibrar os pesos em config/score.json e repontuar
  * tudo com `--score-only`, sem tocar na rede.
+ *
+ * O trabalho é feito em blocos: com o pool na casa das centenas de milhares,
+ * guardar o wikitext de todo mundo em memória antes de gravar consumiria
+ * gigabytes, e uma interrupção custaria tudo que já foi buscado.
  *
  * Uso: npm run enrich -- [--limit=N] [--score-only] [--no-pageviews] [--refresh]
  */
@@ -28,6 +32,9 @@ const skipPageviews = args.includes("--no-pageviews");
 const limitArg = args.find((a) => a.startsWith("--limit="));
 const limit = limitArg ? Number(limitArg.split("=")[1]) : undefined;
 
+/** Artigos medidos e gravados por bloco. */
+const BLOCO = 500;
+
 interface Row {
   page_id: number;
   title: string;
@@ -41,11 +48,10 @@ interface Row {
   curated: number;
 }
 
-const progress = (label: string) => (done: number, total: number) => {
-  if (done % 100 === 0 || done === total) {
-    process.stdout.write(`  ${label}: ${done}/${total}\r`);
-  }
-};
+function fmtDuracao(ms: number): string {
+  const min = Math.round(ms / 60000);
+  return min < 60 ? `${min} min` : `${(min / 60).toFixed(1)} h`;
+}
 
 async function main() {
   const lang = WIKI_LANG;
@@ -86,46 +92,6 @@ async function main() {
     onRequest: ({ cached: hit }) => (hit ? cached++ : network++),
   });
 
-  const titles = rows.map((r) => r.title);
-  const measured = new Map<string, Partial<Row>>();
-
-  if (!scoreOnly) {
-    console.log("Langlinks e imagens");
-    const props = await fetchCountedProps(client, titles, progress("props"));
-    console.log("\n\nWikitext (refs e seções)");
-    const wikitexts = await fetchWikitext(client, titles, progress("wikitext"));
-    console.log("\n\nBacklinks");
-    const backlinks = await fetchBacklinks(client, titles, undefined, progress("backlinks"));
-    console.log("");
-
-    const views = new Map<string, number>();
-    if (!skipPageviews) {
-      console.log("\nAudiência");
-      let done = 0;
-      for (const title of titles) {
-        const v = await fetchPageviews(lang, title, 12, cache);
-        if (v !== undefined) views.set(title, v);
-        done++;
-        if (done % 100 === 0 || done === titles.length) {
-          process.stdout.write(`  audiência: ${done}/${titles.length}\r`);
-        }
-      }
-      console.log("");
-    }
-
-    for (const title of titles) {
-      const wikitext = wikitexts.get(title) ?? "";
-      measured.set(title, {
-        langlinks: props.langlinks.get(title) ?? 0,
-        images: props.images.get(title) ?? 0,
-        backlinks: backlinks.get(title) ?? 0,
-        refs: wikitext ? countRefs(wikitext) : null,
-        sections: wikitext ? countSections(wikitext) : null,
-        pageviews: views.get(title) ?? null,
-      });
-    }
-  }
-
   const update = db.prepare(
     `UPDATE articles
         SET langlinks = @langlinks, backlinks = @backlinks, refs = @refs,
@@ -135,33 +101,74 @@ async function main() {
       WHERE lang = @lang AND page_id = @pageId`,
   );
 
-  const updatedAt = new Date().toISOString();
-  const run = db.transaction((batch: Row[]) => {
-    for (const r of batch) {
-      const m = measured.get(r.title) ?? {};
-      const metrics = {
-        bytes: r.bytes,
-        langlinks: m.langlinks ?? r.langlinks,
-        backlinks: m.backlinks ?? r.backlinks,
-        refs: m.refs ?? r.refs,
-        sections: m.sections ?? r.sections,
-        images: m.images ?? r.images,
-        pageviews: m.pageviews ?? r.pageviews,
-      };
-      const { quality, surprise } = scoreArticle(metrics, scoreCfg, {
-        curated: r.curated === 1,
-      });
-      update.run({
-        ...metrics,
-        quality,
-        surprise,
-        lang,
-        pageId: r.page_id,
-        updatedAt,
-      });
+  const gravarBloco = db.transaction(
+    (bloco: Row[], medidas: Map<string, Partial<Row>>) => {
+      const updatedAt = new Date().toISOString();
+      for (const r of bloco) {
+        const m = medidas.get(r.title) ?? {};
+        const metrics = {
+          bytes: r.bytes,
+          langlinks: m.langlinks ?? r.langlinks,
+          backlinks: m.backlinks ?? r.backlinks,
+          refs: m.refs ?? r.refs,
+          sections: m.sections ?? r.sections,
+          images: m.images ?? r.images,
+          pageviews: m.pageviews ?? r.pageviews,
+        };
+        const { quality, surprise } = scoreArticle(metrics, scoreCfg, {
+          curated: r.curated === 1,
+        });
+        update.run({ ...metrics, quality, surprise, lang, pageId: r.page_id, updatedAt });
+      }
+    },
+  );
+
+  const inicio = Date.now();
+  let feitos = 0;
+
+  for (let i = 0; i < rows.length; i += BLOCO) {
+    const bloco = rows.slice(i, i + BLOCO);
+    const titulos = bloco.map((r) => r.title);
+    const medidas = new Map<string, Partial<Row>>();
+
+    if (!scoreOnly) {
+      const props = await fetchCountedProps(client, titulos);
+      const wikitexts = await fetchWikitext(client, titulos);
+      const backlinks = await fetchBacklinks(client, titulos);
+
+      const views = new Map<string, number>();
+      if (!skipPageviews) {
+        for (const t of titulos) {
+          const v = await fetchPageviews(lang, t, 12, cache);
+          if (v !== undefined) views.set(t, v);
+        }
+      }
+
+      for (const t of titulos) {
+        const w = wikitexts.get(t);
+        medidas.set(t, {
+          langlinks: props.langlinks.get(t) ?? 0,
+          images: props.images.get(t) ?? 0,
+          backlinks: backlinks.get(t) ?? 0,
+          refs: w ? countRefs(w) : null,
+          sections: w ? countSections(w) : null,
+          pageviews: views.get(t) ?? null,
+        });
+      }
+      // O wikitext do bloco sai de escopo aqui, e é o que mantém a memória
+      // constante ao longo de uma corrida de centenas de milhares.
     }
-  });
-  run(rows);
+
+    gravarBloco(bloco, medidas);
+    feitos += bloco.length;
+
+    const decorrido = Date.now() - inicio;
+    const restante = (decorrido / feitos) * (rows.length - feitos);
+    process.stdout.write(
+      `  ${feitos}/${rows.length} — faltam ~${fmtDuracao(restante)}          \r`,
+    );
+  }
+  console.log("");
 
   const stats = db
     .prepare(
@@ -178,6 +185,7 @@ async function main() {
   console.log(`  qualidade: ${stats.qmin} … ${stats.qavg} … ${stats.qmax}`);
   console.log(`  surpresa:  ${stats.smin} … ${stats.smax}`);
   console.log(`Requests: ${network} de rede, ${cached} do cache`);
+  console.log(`Tempo: ${fmtDuracao(Date.now() - inicio)}`);
 }
 
 main().catch((err) => {

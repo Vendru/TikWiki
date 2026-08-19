@@ -34,6 +34,7 @@
     "typecheck": "tsc --noEmit",
     "ingest:unusual": "tsx scripts/ingest-unusual.ts",
     "sweep": "tsx scripts/sweep.ts",
-    "enrich": "tsx scripts/enrich.ts"
+    "enrich": "tsx scripts/enrich.ts",
+    "ingest:dyk": "tsx scripts/ingest-dyk.ts"
   }
 }

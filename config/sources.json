@@ -17,5 +17,19 @@
       "searchHint": "artigos peculiares",
       "excludeSubpages": []
     }
+  },
+
+  "$dyk": "Arquivo do 'Você sabia?'. Em en há dois formatos vivos: 241 arquivos numerados e 271 por ano/mês, que cobrem períodos distintos e por isso entram os dois. archivePattern separa os arquivos de conteúdo das subpáginas de histórico e índice.",
+  "dyk": {
+    "en": {
+      "archivePrefix": "Did you know archive",
+      "searchHint": "did you know archive",
+      "archivePattern": "^Wikipedia:Did you know archive( \\d+|/\\d{4}/\\w+)$"
+    },
+    "pt": {
+      "archivePrefix": "Sabia que/Arquivo",
+      "searchHint": "sabia que arquivo",
+      "archivePattern": "^Wikipédia:Sabia que/Arquivo"
+    }
   }
 }
