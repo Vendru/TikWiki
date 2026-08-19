@@ -35,6 +35,10 @@
     "ingest:unusual": "tsx scripts/ingest-unusual.ts",
     "sweep": "tsx scripts/sweep.ts",
     "enrich": "tsx scripts/enrich.ts",
-    "ingest:dyk": "tsx scripts/ingest-dyk.ts"
+    "ingest:dyk": "tsx scripts/ingest-dyk.ts",
+    "pool:pack": "tsx scripts/pool-pack.ts",
+    "pool:unpack": "tsx scripts/pool-unpack.ts",
+    "prebuild": "tsx scripts/pool-unpack.ts",
+    "predev": "tsx scripts/pool-unpack.ts"
   }
 }

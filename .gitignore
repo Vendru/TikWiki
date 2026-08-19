@@ -7,10 +7,12 @@ next-env.d.ts
 # Cache das respostas cruas da API: local, recriável, grande.
 .cache/
 
-# O pool (data/pool.db) é commitado de propósito, como artefato de build.
-# Os arquivos auxiliares do WAL não são.
+# O pool vai versionado comprimido (data/pool.db.gz): o arquivo cru passa de
+# 200 MB e o GitHub recusa qualquer arquivo acima de 100 MB. O build extrai.
+data/*.db
 data/*.db-wal
 data/*.db-shm
+!data/*.db.gz
 
 .env
 .env.local
