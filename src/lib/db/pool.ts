@@ -166,9 +166,20 @@ export function randomArticle(opts: RandomOptions = {}): PoolArticle | undefined
   // Tira candidatos por rowid sorteado. Buracos deixados por remoção fazem
   // tentativas caírem no vazio, e sortear de novo mantém a uniformidade que
   // um 'rowid >= ?' quebraria.
+  //
+  // O orçamento de tentativas acompanha a densidade do que é elegível: no
+  // modo surpresa só 8,8% do "Você sabia?" tem audiência medida, e um teto
+  // fixo entregava 6 candidatos em vez de 24, o que enfraquece a ponderação
+  // justamente no modo que mais depende dela. Cada tentativa é uma busca por
+  // índice, então esticar o teto custa microssegundos.
   const largura = faixa.max - faixa.min + 1;
+  const densidade = Math.max(faixa.n / largura, 0.01);
+  const tentativas = Math.min(
+    Math.ceil((cfg.candidatos / densidade) * 1.5),
+    cfg.candidatos * 100,
+  );
+
   const candidatos: Row[] = [];
-  const tentativas = cfg.candidatos * 3;
   for (let i = 0; i < tentativas && candidatos.length < cfg.candidatos; i++) {
     const alvo = faixa.min + Math.floor(Math.random() * largura);
     const row = porRowid.get(alvo, lang, fonte) as Row | undefined;
@@ -207,7 +218,49 @@ export function randomArticle(opts: RandomOptions = {}): PoolArticle | undefined
   return row ? toArticle(row) : undefined;
 }
 
-/** Sorteio dentro de um tópico, onde o rowid não ajuda. */
+const COLUNAS_A = COLUMNS.split(",")
+  .map((c) => `a.${c.trim()}`)
+  .join(", ");
+
+/**
+ * Quantos artigos cada fonte tem dentro de um tema.
+ *
+ * Memorizado porque o pool é read-only: sem isso, cada sorteio com filtro de
+ * tema pagava um GROUP BY sobre a junção, e a latência triplicava.
+ */
+const contagensTema = new Map<string, Map<string, number>>();
+
+function contagemPorTema(
+  lang: string,
+  topic: string,
+  comSurpresa: boolean,
+  filtro: string,
+): Map<string, number> {
+  const chave = `${lang}|${topic}|${comSurpresa}`;
+  if (!contagensTema.has(chave)) {
+    const linhas = db()
+      .prepare(
+        `SELECT a.source, COUNT(*) n
+           FROM articles a
+           JOIN article_topics at ON at.lang = a.lang AND at.page_id = a.page_id
+           JOIN topics t ON t.id = at.topic_id
+          WHERE a.lang = ? AND t.slug = ?${filtro}
+          GROUP BY a.source`,
+      )
+      .all(lang, topic) as { source: string; n: number }[];
+    contagensTema.set(chave, new Map(linhas.map((l) => [l.source, l.n])));
+  }
+  return contagensTema.get(chave)!;
+}
+
+/**
+ * Sorteio dentro de um tema.
+ *
+ * O rowid não ajuda aqui, porque o tema não é denso na tabela — mas a escolha
+ * da fonte continua valendo. Sem ela o filtro de tema desfazia o principal
+ * ganho do sorteio: medido, a lista peculiar caía de 58% para 8% assim que o
+ * usuário escolhia um tema.
+ */
 function porTopico(
   lang: string,
   topic: string,
@@ -216,24 +269,40 @@ function porTopico(
   cfg: DrawConfig,
   comSurpresa: boolean,
 ): PoolArticle | undefined {
-  const linhas = db()
-    .prepare(
-      `SELECT ${COLUMNS.split(",")
-        .map((c) => `a.${c.trim()}`)
-        .join(", ")}
-         FROM articles a
-         JOIN article_topics at ON at.lang = a.lang AND at.page_id = a.page_id
-         JOIN topics t ON t.id = at.topic_id
-        WHERE a.lang = ? AND t.slug = ?${
-          comSurpresa ? " AND a.score_surprise IS NOT NULL" : ""
-        }
-        ORDER BY RANDOM() LIMIT ?`,
-    )
-    .all(lang, topic, cfg.candidatos * 2) as Row[];
+  const filtro = comSurpresa ? " AND a.score_surprise IS NOT NULL" : "";
 
-  const disponiveis = linhas.filter((r) => !exclude.has(r.page_id));
+  const fonte = sortearFonte(contagemPorTema(lang, topic, comSurpresa, filtro), cfg);
+  if (!fonte) return undefined;
+
+  // Sorteia pelo ordinal denso: escolher um número e ir direto pela chave
+  // primária, em vez de varrer a fonte inteira e montar uma árvore temporária
+  // para o ORDER BY RANDOM(), que custava 129 ms.
+  const total = contagemPorTema(lang, topic, false, "").get(fonte) ?? 0;
+  if (total === 0) return undefined;
+
+  const porOrdinal = db().prepare(
+    `SELECT ${COLUNAS_A}
+       FROM topic_index ti
+       JOIN articles a ON a.lang = ti.lang AND a.page_id = ti.page_id
+      WHERE ti.lang = ? AND ti.source = ? AND ti.ord = ?
+        AND ti.topic_id = (SELECT id FROM topics WHERE slug = ?)${filtro}`,
+  );
+
+  const candidatos: Row[] = [];
+  const tentativas = comSurpresa ? cfg.candidatos * 12 : cfg.candidatos * 2;
+  for (let i = 0; i < tentativas && candidatos.length < cfg.candidatos; i++) {
+    const row = porOrdinal.get(
+      lang,
+      fonte,
+      Math.floor(Math.random() * total),
+      topic,
+    ) as Row | undefined;
+    if (row) candidatos.push(row);
+  }
+
+  const disponiveis = candidatos.filter((r) => !exclude.has(r.page_id));
   const escolhido = escolherPorPeso(
-    (disponiveis.length ? disponiveis : linhas).map(paraCandidato),
+    (disponiveis.length ? disponiveis : candidatos).map(paraCandidato),
     modo,
     cfg,
   );

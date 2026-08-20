@@ -55,6 +55,21 @@ CREATE TABLE IF NOT EXISTS article_topics (
 
 CREATE INDEX IF NOT EXISTS article_topics_topic ON article_topics (topic_id, lang);
 
+-- Ordinal denso por (tema, fonte), para sortear dentro de um tema em O(1).
+--
+-- Sem ele o sorteio com filtro de tema custava 129 ms: o planejador varria os
+-- 121 mil artigos da fonte e ainda montava uma árvore temporária para o
+-- ORDER BY RANDOM(). Com o ordinal, sortear é escolher um número e ir direto
+-- pela chave primária. É um artefato derivado — scripts/topics.ts reconstrói.
+CREATE TABLE IF NOT EXISTS topic_index (
+  lang     TEXT    NOT NULL,
+  topic_id INTEGER NOT NULL REFERENCES topics (id) ON DELETE CASCADE,
+  source   TEXT    NOT NULL,
+  ord      INTEGER NOT NULL,
+  page_id  INTEGER NOT NULL,
+  PRIMARY KEY (lang, topic_id, source, ord)
+);
+
 -- Registro de cada execução da pipeline, para saber a idade do pool.
 CREATE TABLE IF NOT EXISTS ingest_runs (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,

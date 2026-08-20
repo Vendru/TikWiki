@@ -103,6 +103,34 @@ if (!seco) {
     for (const a of atribuicoes) {
       inserir.run(WIKI_LANG, a.pageId, ids.get(a.slug)!, a.score);
     }
+
+    // Ordinal denso por (tema, fonte). É o que permite sortear dentro de um
+    // tema escolhendo um número, em vez de varrer a fonte inteira e ordenar.
+    db.prepare(`DELETE FROM topic_index WHERE lang = ?`).run(WIKI_LANG);
+    const inserirOrd = db.prepare(
+      `INSERT INTO topic_index (lang, topic_id, source, ord, page_id)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    const membros = db
+      .prepare(
+        `SELECT at.topic_id, a.source, a.page_id
+           FROM article_topics at
+           JOIN articles a ON a.lang = at.lang AND a.page_id = at.page_id
+          WHERE at.lang = ?
+          ORDER BY at.topic_id, a.source, a.page_id`,
+      )
+      .all(WIKI_LANG) as { topic_id: number; source: string; page_id: number }[];
+
+    let chaveAtual = "";
+    let ord = 0;
+    for (const m of membros) {
+      const chave = `${m.topic_id}|${m.source}`;
+      if (chave !== chaveAtual) {
+        chaveAtual = chave;
+        ord = 0;
+      }
+      inserirOrd.run(WIKI_LANG, m.topic_id, m.source, ord++, m.page_id);
+    }
   });
   gravar();
 }

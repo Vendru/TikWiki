@@ -135,6 +135,76 @@ describe("randomArticle — sorteio por rowid", () => {
   });
 });
 
+describe("randomArticle — filtro de tema", () => {
+  it("continua respeitando o peso por fonte", async () => {
+    // Regressão real: o caminho do tema ignorava a escolha de fonte, e a
+    // lista peculiar caía de 58% para 8% assim que o usuário filtrava.
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "tikwiki-tema-"));
+    const file = path.join(dir2, "tema.db");
+    const seed2 = openDb({ file });
+
+    // Fonte curada minúscula contra uma fonte grande, que é a situação real.
+    upsertArticles(seed2, [
+      ...Array.from({ length: 5 }, (_, i) => ({
+        lang: "en",
+        pageId: i + 1,
+        title: `Peculiar ${i + 1}`,
+        url: `https://en.wikipedia.org/wiki/P${i + 1}`,
+        source: "unusual",
+        curated: true,
+      })),
+      ...Array.from({ length: 500 }, (_, i) => ({
+        lang: "en",
+        pageId: 1000 + i,
+        title: `Sabia ${i}`,
+        url: `https://en.wikipedia.org/wiki/S${i}`,
+        source: "dyk",
+        curated: true,
+      })),
+    ]);
+
+    seed2.prepare(`INSERT INTO topics (id, slug, label) VALUES (1, 'tema', 'Tema')`).run();
+    const vincula = seed2.prepare(
+      `INSERT INTO article_topics (lang, page_id, topic_id, score) VALUES ('en', ?, 1, 1)`,
+    );
+    const ordena = seed2.prepare(
+      `INSERT INTO topic_index (lang, topic_id, source, ord, page_id) VALUES ('en', 1, ?, ?, ?)`,
+    );
+    for (let i = 0; i < 5; i++) {
+      vincula.run(i + 1);
+      ordena.run("unusual", i, i + 1);
+    }
+    for (let i = 0; i < 500; i++) {
+      vincula.run(1000 + i);
+      ordena.run("dyk", i, 1000 + i);
+    }
+    seed2.close();
+
+    process.env.TIKWIKI_DB = file;
+    vi.resetModules();
+    const { randomArticle } = await import("../src/lib/db/pool");
+
+    const porFonte = new Map<string, number>();
+    for (let i = 0; i < 600; i++) {
+      const a = randomArticle({ lang: "en", topic: "tema" })!;
+      porFonte.set(a.source, (porFonte.get(a.source) ?? 0) + 1);
+    }
+
+    // A fonte curada é 1% dos artigos do tema; sem a ponderação apareceria
+    // nessa proporção. Com ela, tem que passar de um terço.
+    expect(porFonte.get("unusual")! / 600).toBeGreaterThan(0.33);
+
+    process.env.TIKWIKI_DB = dbFile;
+    vi.resetModules();
+    fs.rmSync(dir2, { recursive: true, force: true });
+  });
+
+  it("devolve undefined para tema que não existe", async () => {
+    const { randomArticle } = await load();
+    expect(randomArticle({ lang: "en", topic: "inexistente" })).toBeUndefined();
+  });
+});
+
 describe("poolSize", () => {
   it("conta apenas o idioma pedido", async () => {
     const { poolSize } = await load();
