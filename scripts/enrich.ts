@@ -13,6 +13,7 @@
  *   --no-backlinks   pula backlinks (1 request por artigo)
  *   --no-pageviews   pula audiência (1 request por artigo, e é outra API)
  *   --top=N          mede os N melhores pelo score que já existe
+ *   --band=lo:hi     mede uma faixa de percentil de qualidade (ex.: 90:99)
  *   --limit=N        processa só os N primeiros, para validar rápido
  *   --score-only     repontua sem tocar na rede
  *   --refresh        ignora o cache de leitura
@@ -44,6 +45,10 @@ const limitArg = args.find((a) => a.startsWith("--limit="));
 const limit = limitArg ? Number(limitArg.split("=")[1]) : undefined;
 const topArg = args.find((a) => a.startsWith("--top="));
 const top = topArg ? Number(topArg.split("=")[1]) : undefined;
+const bandaArg = args.find((a) => a.startsWith("--band="));
+const banda = bandaArg
+  ? (bandaArg.split("=")[1].split(":").map(Number) as [number, number])
+  : undefined;
 
 /**
  * Backlinks e audiência custam um request por artigo; as demais métricas vêm
@@ -90,22 +95,50 @@ async function main() {
   if (!skipPageviews) faltando.push("pageviews IS NULL");
   const where = scoreOnly ? "1=1" : faltando.join(" OR ");
 
-  // Com --top, mede primeiro os melhores pelo score que já existe. É como a
-  // segunda etapa escolhe onde gastar o request por artigo.
+  // Com --top, mede primeiro os melhores pelo score que já existe.
   const ordem = top
     ? "score_quality DESC NULLS LAST, curated DESC"
     : "curated DESC, page_id";
   const teto = top ?? limit;
 
+  /**
+   * Com --band=lo:hi, mede uma faixa de percentil de qualidade em vez do topo.
+   *
+   * O topo puro não serve para o modo surpresa: ordenado por qualidade, os
+   * primeiros são "United States", "France", "Mexico" — artigos que ninguém
+   * precisa descobrir e cuja audiência já se sabe altíssima. Medir a faixa
+   * logo abaixo gasta a cota onde ela pode revelar algo.
+   */
+  let corteBaixo: number | undefined;
+  let corteAlto: number | undefined;
+  if (banda) {
+    const [lo, hi] = banda;
+    const qs = (
+      db
+        .prepare(
+          `SELECT score_quality q FROM articles
+            WHERE lang = ? AND score_quality IS NOT NULL ORDER BY q`,
+        )
+        .all(lang) as { q: number }[]
+    ).map((r) => r.q);
+    const percentil = (x: number) => qs[Math.floor((qs.length - 1) * (x / 100))];
+    corteBaixo = percentil(lo);
+    corteAlto = percentil(hi);
+    console.log(
+      `Faixa p${lo}–p${hi}: qualidade de ${corteBaixo.toFixed(1)} a ${corteAlto.toFixed(1)}`,
+    );
+  }
+
+  const filtroBanda = banda ? ` AND score_quality BETWEEN ? AND ?` : "";
   const rows = db
     .prepare(
       `SELECT page_id, title, bytes, langlinks, backlinks, refs, images,
               sections, pageviews, curated
-         FROM articles WHERE lang = ? AND ${where}
+         FROM articles WHERE lang = ? AND (${where})${filtroBanda}
          ORDER BY ${ordem}
          ${teto ? `LIMIT ${Number(teto)}` : ""}`,
     )
-    .all(lang) as Row[];
+    .all(...(banda ? [lang, corteBaixo, corteAlto] : [lang])) as Row[];
 
   console.log(
     `${scoreOnly ? "Repontuando" : "Enriquecendo"} ${rows.length} artigos — ${lang}`,
