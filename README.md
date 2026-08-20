@@ -374,6 +374,44 @@ para saber a idade e a procedência do pool.
 O texto dos artigos vem da Wikipédia sob CC BY-SA 4.0. O app precisa exibir a
 atribuição e o link para o artigo original, como a licença exige.
 
+## Qualidade do pool, medida
+
+Nenhuma métrica sabe o que é curioso, então a única aferição honesta é ler uma
+amostra. `npm run sample` imprime o que o card mostraria, com os scores ao
+lado, e aceita `--source`, `--mode=quality|surprise` e `--seed` para repetir a
+mesma amostra depois de uma mudança.
+
+Lendo 30 artigos sorteados uniformemente do pool, eu abriria cerca de 8. Os
+outros são válidos e secos: cantatas de Bach, políticos regionais, dubladores.
+A mesma leitura sobre 8 sorteados só da lista de Artigos peculiares deu 8 em 8
+— "o maior lago numa ilha num lago numa ilha", "a única monarquia
+constitucional marxista-leninista da história, com Elizabeth II como monarca",
+"os bungee jumpers originais são de Vanuatu".
+
+Esse contraste é o dado mais importante do pool, e é de julgamento, não de
+métrica: a lista peculiar é 3,3% do total e concentra o melhor conteúdo. Com
+sorteio uniforme ela aparece em 3 de cada 100 artigos.
+
+Não há classe sistemática a filtrar que resolva isso. Medindo pelo resumo, as
+suspeitas somam pouco: espécies e gêneros são 3,4% do pool, igrejas 0,6%,
+álbuns 0,7%, políticos 0,5% — 5,9% no total, e várias delas trazem material
+bom (*Nepenthes lowii*, a planta carnívora que serve de banheiro para
+musaranhos, é uma espécie). O conteúdo seco do "Você sabia?" não tem assinatura
+estrutural: a barra da fonte é "um fato interessante sobre um artigo novo", e
+isso produz uma faixa ampla de artigos corretos e sem graça.
+
+### Integridade
+
+| verificação | resultado |
+| --- | --- |
+| títulos ou URLs duplicados | 0 |
+| URL malformada | 0 |
+| score fora de faixa | 0 |
+| sem resumo | 6 (0,00%) |
+| sem nota | 177 (0,14%) |
+| nota com marcação ou entidade residual | 26 (0,02%) |
+| sem imagem | 48.977 (39%) |
+
 ## Decisões em aberto
 
 **A fórmula do score é uma proposta, não a especificada.** A baseline não
@@ -393,7 +431,8 @@ do git.
 ## Próximas etapas
 
 4. Tópicos e modos de sorteio
-5. Script de calibração
+5. Calibração — a ferramenta existe (`npm run sample`); falta o ciclo de
+   ajuste em cima dela
 
 O sorteio segue uniforme. A ponderação por score é da etapa 4, e há três coisas
 a resolver lá:
