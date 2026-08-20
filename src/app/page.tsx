@@ -1,4 +1,4 @@
-import { randomArticle } from "@/lib/db/pool";
+import { randomArticle, topics } from "@/lib/db/pool";
 import Reader from "./reader";
 
 export const runtime = "nodejs";
@@ -22,7 +22,8 @@ export default function Home() {
     );
   }
 
-  // O primeiro artigo vem renderizado do servidor: a tela abre com conteúdo,
-  // sem estado de carregamento.
-  return <Reader initial={initial} />;
+  // O primeiro artigo e a lista de temas vêm renderizados do servidor: a tela
+  // abre com conteúdo, sem estado de carregamento e sem um request extra só
+  // para preencher o seletor.
+  return <Reader initial={initial} topics={topics()} />;
 }

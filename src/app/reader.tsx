@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PoolArticle } from "@/lib/db/pool";
+import type { PoolArticle, Topico } from "@/lib/db/pool";
+import { MODOS, type Modo } from "@/lib/modes";
 import { summarize } from "@/lib/wiki/extract";
 
 /** Teto do histórico guardado, para não crescer sem fim no localStorage. */
@@ -28,18 +29,46 @@ function saveSeen(ids: number[]): void {
   }
 }
 
-async function fetchArticle(exclude: number[]): Promise<PoolArticle | undefined> {
-  const query = exclude.slice(-EXCLUDE_LIMIT).join(",");
-  const res = await fetch(`/api/random?exclude=${query}`, { cache: "no-store" });
+/** Filtros que o usuário controla; mudá-los invalida o que foi pré-buscado. */
+interface Filtros {
+  topic: string;
+  mode: Modo;
+}
+
+const ROTULO_MODO: Record<Modo, string> = {
+  mixed: "Equilibrado",
+  quality: "Mais completos",
+  surprise: "Mais obscuros",
+};
+
+async function fetchArticle(
+  exclude: number[],
+  filtros: Filtros,
+): Promise<PoolArticle | undefined> {
+  const params = new URLSearchParams({
+    exclude: exclude.slice(-EXCLUDE_LIMIT).join(","),
+    mode: filtros.mode,
+  });
+  if (filtros.topic) params.set("topic", filtros.topic);
+
+  const res = await fetch(`/api/random?${params}`, { cache: "no-store" });
   if (!res.ok) return undefined;
   const body = (await res.json()) as { article?: PoolArticle };
   return body.article;
 }
 
-export default function Reader({ initial }: { initial: PoolArticle }) {
+export default function Reader({
+  initial,
+  topics,
+}: {
+  initial: PoolArticle;
+  topics: Topico[];
+}) {
   const [stack, setStack] = useState<PoolArticle[]>([initial]);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(false);
+  // "Surpreenda-me" é o padrão: tema vazio quer dizer o pool inteiro.
+  const [filtros, setFiltros] = useState<Filtros>({ topic: "", mode: "mixed" });
 
   // O próximo artigo é buscado enquanto o atual está na tela, para que
   // "outro" troque no mesmo instante do clique.
@@ -51,15 +80,21 @@ export default function Reader({ initial }: { initial: PoolArticle }) {
 
   const prefetch = useCallback(async () => {
     if (prefetched.current) return;
-    const article = await fetchArticle(seen.current);
+    const article = await fetchArticle(seen.current, filtros);
     if (article) prefetched.current = article;
-  }, []);
+  }, [filtros]);
 
   useEffect(() => {
     seen.current = [...loadSeen(), initial.pageId];
     saveSeen(seen.current);
+  }, [initial.pageId]);
+
+  // Trocar de filtro invalida o que já foi pré-buscado: aquele artigo veio do
+  // filtro anterior, e entregá-lo faria o seletor parecer quebrado.
+  useEffect(() => {
+    prefetched.current = undefined;
     void prefetch();
-  }, [initial.pageId, prefetch]);
+  }, [prefetch]);
 
   const next = useCallback(async () => {
     // Se o usuário voltou, avançar refaz o caminho já percorrido.
@@ -81,7 +116,7 @@ export default function Reader({ initial }: { initial: PoolArticle }) {
 
     // Sem prefetch pronto (primeiro clique muito rápido, ou rede lenta).
     setLoading(true);
-    const article = await fetchArticle(seen.current);
+    const article = await fetchArticle(seen.current, filtros);
     setLoading(false);
     if (!article) return;
     seen.current = [...seen.current, article.pageId].slice(-SEEN_LIMIT);
@@ -89,7 +124,7 @@ export default function Reader({ initial }: { initial: PoolArticle }) {
     setStack((s) => [...s, article]);
     setIndex((i) => i + 1);
     void prefetch();
-  }, [index, stack.length, prefetch]);
+  }, [index, stack.length, prefetch, filtros]);
 
   const back = useCallback(() => {
     setIndex((i) => Math.max(0, i - 1));
@@ -114,11 +149,47 @@ export default function Reader({ initial }: { initial: PoolArticle }) {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col gap-6 px-5 py-8 sm:py-12">
-      <header className="flex items-baseline justify-between">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="font-serif text-xl tracking-tight">
           Tik<span className="text-accent">Wiki</span>
         </h1>
-        <p className="text-xs text-muted">um artigo interessante por vez</p>
+
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <label className="sr-only" htmlFor="tema">
+            Tema
+          </label>
+          <select
+            id="tema"
+            value={filtros.topic}
+            onChange={(e) => setFiltros((f) => ({ ...f, topic: e.target.value }))}
+            className="rounded-full border border-edge bg-surface px-3 py-1.5 text-paper outline-none transition hover:border-muted focus:border-accent"
+          >
+            <option value="">Surpreenda-me</option>
+            {topics.map((t) => (
+              <option key={t.slug} value={t.slug}>
+                {t.label} ({t.count.toLocaleString("pt-BR")})
+              </option>
+            ))}
+          </select>
+
+          <label className="sr-only" htmlFor="modo">
+            Modo
+          </label>
+          <select
+            id="modo"
+            value={filtros.mode}
+            onChange={(e) =>
+              setFiltros((f) => ({ ...f, mode: e.target.value as Modo }))
+            }
+            className="rounded-full border border-edge bg-surface px-3 py-1.5 text-paper outline-none transition hover:border-muted focus:border-accent"
+          >
+            {MODOS.map((m) => (
+              <option key={m} value={m}>
+                {ROTULO_MODO[m]}
+              </option>
+            ))}
+          </select>
+        </div>
       </header>
 
       <article

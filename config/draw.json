@@ -1,0 +1,23 @@
+{
+  "$comment": "Como o sorteio pondera. Separado do score de propósito: score é uma propriedade do artigo, peso de sorteio é uma decisão de produto sobre o que o usuário deve ver.",
+
+  "$porFonte": "O maior lever de qualidade do produto, e o mais barato. Lendo 30 artigos sorteados uniformemente eu abriria cerca de 8; lendo 8 sorteados só da lista de Artigos peculiares, 8. A lista é 3,3% do pool e concentra o melhor conteúdo, então no sorteio uniforme ela aparece em 3 de cada 100. Levando-a a metade dos sorteios, a taxa de acerto esperada vai de 27% para cerca de 53%. Não há custo: com 4.202 artigos a 50% do sorteio, quem vir 50 artigos por sessão precisa de 168 sessões para esgotá-la.",
+  "porFonte": {
+    "unusual": 50,
+    "dyk": 45,
+    "random": 5
+  },
+
+  "$candidatos": "O sorteio ponderado tira K candidatos uniformemente e escolhe entre eles com probabilidade proporcional ao peso. K=1 seria sorteio uniforme; K muito alto devolveria sempre o mesmo topo, que é justamente o que a especificação pede para evitar. 24 pondera de verdade sem travar no topo, e custa 24 buscas por índice em vez de varrer 125 mil linhas.",
+  "candidatos": 24,
+
+  "$modos": "quality usa o score de qualidade; surprise usa o de surpresa e só sorteia entre quem tem audiência medida, porque sem o dado não há surpresa a afirmar; mixed mistura os dois na proporção abaixo.",
+  "modos": {
+    "quality": { "quality": 1, "surprise": 0 },
+    "surprise": { "quality": 0, "surprise": 1 },
+    "mixed": { "quality": 0.5, "surprise": 0.5 }
+  },
+
+  "$deslocamento": "O score de surpresa vai a -62,6 no pool medido, e peso negativo não existe. A escala é deslocada para começar em 1 antes de virar peso.",
+  "pisoDoPeso": 1
+}

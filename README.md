@@ -15,8 +15,8 @@ read-only em produção.
 
 ## Estado atual
 
-Etapas 1 a 3 concluídas, com as três fontes de candidatos ingeridas: a lista de
-Artigos peculiares, o arquivo do "Você sabia?" e a varredura ampla.
+Etapas 1 a 4 concluídas: as três fontes ingeridas, o pool filtrado e pontuado,
+e o sorteio ponderado com temas e modos.
 
 | Métrica | Valor |
 | --- | --- |
@@ -45,6 +45,8 @@ npm run enrich -- --band=90:99 --no-backlinks     # audiência na faixa que rend
 npm run enrich -- --score-only              # repontua sem tocar na rede
 npm run prune                               # remove o que as regras atuais reprovam
 npm run tidy:notes                          # reaplica a limpeza às notas gravadas
+npm run topics                              # popula os temas, sem tocar na rede
+npm run sample                              # amostra para julgar à mão
 npm run pool:pack                           # gera data/pool.db.gz para versionar
 ```
 
@@ -185,17 +187,77 @@ O histórico da sessão fica em `localStorage` e acompanha o request como
 `exclude`, para não repetir. Dá para voltar ao anterior, e `←` / `→` / espaço
 navegam.
 
+O seletor de tema tem "Surpreenda-me" como padrão, e o de modo começa em
+equilibrado. Trocar qualquer um dos dois descarta o artigo já pré-buscado —
+ele veio do filtro anterior, e entregá-lo faria o seletor parecer quebrado.
+
 ### Rotas
 
 | Rota | O que faz |
 | --- | --- |
-| `GET /api/random?exclude=1,2,3` | Um artigo, fora os ids já vistos |
+| `GET /api/random?exclude=&mode=&topic=` | Um artigo, fora os ids já vistos |
+| `GET /api/topics` | Temas disponíveis, com a contagem de cada um |
 
-`topic` e `mode` entram na etapa 4, junto com o sorteio ponderado por score.
-Hoje o sorteio é uniforme: com o pool na casa dos milhares o `ORDER BY RANDOM()`
-custa um scan barato, e não vale inventar amostragem que vai ser substituída.
+`mode` inválido devolve 400; tema sem artigo devolve 404. Nenhuma rota chama a
+API da Wikipédia durante o request.
 
-Nenhuma rota chama a API da Wikipédia durante o request.
+## Sorteio
+
+O sorteio é em duas etapas, e a primeira é o maior lever de qualidade do
+produto.
+
+**Primeiro a fonte**, pelos pesos em `config/draw.json`. A lista de Artigos
+peculiares é 3,3% do pool e concentra o melhor conteúdo: sem esse passo ela
+apareceria em 3 de cada 100 sorteios. Com os pesos atuais ela fica em torno de
+50%, medido em 200 sorteios reais:
+
+| fonte | peso | medido |
+| --- | --- | --- |
+| Artigos peculiares | 50 | 54,5% |
+| "Você sabia?" | 45 | 38,0% |
+| varredura ampla | 5 | 7,5% |
+
+O efeito no que o usuário vê: numa amostra de 14 artigos sorteados depois da
+mudança, eu abriria 9 — "Fart Proudly" de Benjamin Franklin, *Fox tossing*,
+*Potoooooooo*, o paradoxo de Grelling–Nelson. Antes eram cerca de 8 em 30.
+
+**Depois o artigo**, tirando candidatos uniformemente por rowid e escolhendo
+entre eles com probabilidade proporcional ao peso. Com um candidato só o
+sorteio seria uniforme; com muitos, sairia sempre o mesmo topo, que é o que a
+especificação pede para evitar. 24 pondera de verdade sem travar, e custa 24
+buscas por índice em vez de varrer 125 mil linhas — o request fica em 5ms.
+
+Os modos mudam o peso: `quality` usa o score de qualidade, `surprise` o de
+surpresa, `mixed` mistura os dois. O modo surpresa só sorteia entre os 14.948
+artigos com audiência medida, porque sem o dado não há surpresa a afirmar. A
+escala de surpresa vai a -62,6, e peso negativo não existe, então ela é
+deslocada para um piso antes de virar peso.
+
+Com filtro de tema o sorteio por rowid não serve — o tema não é denso na
+tabela — então a consulta passa pelo índice de junção e sobe para ~50ms. O
+prefetch mascara isso: o usuário nunca espera.
+
+## Temas
+
+A especificação pedia os rótulos de ML da busca (`articletopic:`), mas eles não
+são consultáveis por artigo: a busca devolve artigos por tema, e cruzar isso
+com o pool exigiria varrer a wiki inteira. Buscar as categorias de cada artigo
+custaria cerca de 18.700 requests, e o filtro de tema é opcional na
+especificação.
+
+A saída veio de um dado que já estava no pool: **as subpáginas da lista de
+Artigos peculiares são uma taxonomia atribuída à mão pelos curadores**, e
+cobrem 100% dos 4.202 artigos da lista. Elas viraram os 14 temas canônicos.
+Para as demais fontes o tema é inferido do resumo, que quase sempre diz o que a
+coisa é na primeira frase.
+
+`article_topics.score` guarda a diferença: 1 para atribuição humana, 0,5 para
+inferência. Cobertura de 71% do pool; os 29% sem tema aparecem no sorteio sem
+filtro, que é o padrão.
+
+```bash
+npm run topics    # popula os temas, sem tocar na rede
+```
 
 ## Filtro, score e varredura ampla
 
@@ -430,18 +492,15 @@ do git.
 
 ## Próximas etapas
 
-4. Tópicos e modos de sorteio
 5. Calibração — a ferramenta existe (`npm run sample`); falta o ciclo de
-   ajuste em cima dela
+   ajuste em cima dela, agora que os pesos de sorteio são o que mais move a
+   qualidade percebida.
 
-O sorteio segue uniforme. A ponderação por score é da etapa 4, e há três coisas
-a resolver lá:
+O que ficou por fazer, em ordem de valor:
 
-- **`score_surprise` é nulo em 88% do pool.** Surpresa é uma afirmação sobre
-  audiência, e sem o dado ela não se sustenta. O modo surpresa precisa sortear
-  só entre os 14.948 medidos, em vez de tratar o nulo como zero.
-- **A escala de surpresa tem valores negativos**, então precisa ser deslocada
-  antes de virar peso de sorteio.
-- **Volume vence score.** Com o DYK sendo 96% do pool, o bônus de curadoria não
-  segura a lista peculiar no sorteio ponderado; se ela deve ser a espinha
-  dorsal, isso vira ponderação explícita por fonte.
+- **Audiência para o resto do pool.** Só 12% tem, e é o que limita o modo
+  surpresa. São 110 mil requests numa API que já recusou tudo por horas.
+- **Backlinks.** Medidos em 3,8% do pool, e a ausência custa pouco: 0,943 de
+  correlação de postos com o score completo.
+- **Temas para os 29% sem cobertura**, que exigiria as categorias de cada
+  artigo — cerca de 18.700 requests.
