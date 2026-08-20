@@ -57,6 +57,31 @@ describe("tidyNote", () => {
     );
   });
 
+  it("decodifica entidades HTML que sobrevivem ao wikitext", () => {
+    // Chegavam cruas ao card, inclusive nos melhores artigos do pool:
+    // "Death from laughter: Don't laugh&nbsp;– it's happened."
+    expect(tidyNote("Don't laugh&nbsp;&ndash; it's happened.")).toBe(
+      "Don't laugh – it's happened.",
+    );
+    expect(tidyNote("World War&nbsp;II foi travada num castelo.")).toBe(
+      "World War II foi travada num castelo.",
+    );
+    expect(tidyNote("Fish &amp; chips com 20&deg;C.")).toBe("Fish & chips com 20°C.");
+  });
+
+  it("decodifica entidades numéricas, decimais e hexadecimais", () => {
+    expect(tidyNote("Caf&#233; e ch&#xE1;.")).toBe("Café e chá.");
+  });
+
+  it("deixa intacto o que não é entidade conhecida", () => {
+    const t = "A empresa AT&T e a fórmula a &lt; b.";
+    expect(tidyNote(t)).toBe("A empresa AT&T e a fórmula a < b.");
+  });
+
+  it("não estoura com entidade numérica fora de faixa", () => {
+    expect(() => tidyNote("Lixo &#99999999999;.")).not.toThrow();
+  });
+
   it("não confunde parêntese legítimo com legenda", () => {
     const t = "O Peel P50 (1962-1965) é o menor carro do mundo.";
     expect(tidyNote(t)).toBe(t);

@@ -44,13 +44,50 @@ const CELL_ATTRS =
 const PICTURED = /\s*\([^)]*\b(?:pictured|imagem|na foto)\b[^)]*\)/gi;
 
 /**
+ * Entidades HTML que sobrevivem ao wikitext.
+ *
+ * Editores escrevem `World War&nbsp;II` para o número não se separar do nome,
+ * e isso chega cru ao card. O espaço rígido vira espaço comum: numa nota
+ * curta o controle de quebra não compensa carregar um caractere invisível que
+ * a normalização de espaços trata de um jeito e a comparação de outro.
+ */
+const ENTIDADES: Record<string, string> = {
+  nbsp: " ",
+  ndash: "–",
+  mdash: "—",
+  amp: "&",
+  quot: '"',
+  apos: "'",
+  lt: "<",
+  gt: ">",
+  hellip: "…",
+  times: "×",
+  deg: "°",
+};
+
+function decodificarEntidades(s: string): string {
+  return s.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (inteiro, corpo: string) => {
+    if (corpo[0] === "#") {
+      const code = corpo[1]?.toLowerCase() === "x"
+        ? Number.parseInt(corpo.slice(2), 16)
+        : Number.parseInt(corpo.slice(1), 10);
+      // Fora da faixa válida, deixa como está em vez de gerar lixo.
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : inteiro;
+    }
+    return ENTIDADES[corpo.toLowerCase()] ?? inteiro;
+  });
+}
+
+/**
  * Limpa uma nota escrita à mão, seja da lista peculiar ou de um gancho.
  *
  * Some com o que é andaime da página de origem e não diz nada ao leitor: a
  * formatação da célula e a referência a uma foto que o card não tem.
  */
 export function tidyNote(note: string): string {
-  let s = note.replace(CELL_ATTRS, "");
+  let s = decodificarEntidades(note.replace(CELL_ATTRS, ""));
   s = s.replace(PICTURED, "");
   s = s.replace(/\s+([,.;:!?])/g, "$1");
   s = s.replace(/\s{2,}/g, " ").trim();
