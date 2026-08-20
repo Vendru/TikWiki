@@ -15,8 +15,8 @@ read-only em produção.
 
 ## Estado atual
 
-Etapas 1 a 4 concluídas: as três fontes ingeridas, o pool filtrado e pontuado,
-e o sorteio ponderado com temas e modos.
+As cinco etapas concluídas: as três fontes ingeridas, o pool filtrado e
+pontuado, o sorteio ponderado com temas e modos, e o ciclo de calibração.
 
 | Métrica | Valor |
 | --- | --- |
@@ -211,15 +211,15 @@ peculiares é 3,3% do pool e concentra o melhor conteúdo: sem esse passo ela
 apareceria em 3 de cada 100 sorteios. Com os pesos atuais ela fica em torno de
 50%, medido em 200 sorteios reais:
 
-| fonte | peso | medido |
+| fonte | peso | medido em 250 sorteios |
 | --- | --- | --- |
-| Artigos peculiares | 50 | 54,5% |
-| "Você sabia?" | 45 | 38,0% |
-| varredura ampla | 5 | 7,5% |
+| Artigos peculiares | 60 | 57% |
+| "Você sabia?" | 39 | 42% |
+| varredura ampla | 1 | 1% |
 
-O efeito no que o usuário vê: numa amostra de 14 artigos sorteados depois da
-mudança, eu abriria 9 — "Fart Proudly" de Benjamin Franklin, *Fox tossing*,
-*Potoooooooo*, o paradoxo de Grelling–Nelson. Antes eram cerca de 8 em 30.
+Os pesos valem nos dois caminhos, com e sem filtro de tema. Sem isso o filtro
+desfazia o ganho em silêncio: medido, a lista peculiar caía de 58% para 8%
+assim que o usuário escolhia um tema.
 
 **Depois o artigo**, tirando candidatos uniformemente por rowid e escolhendo
 entre eles com probabilidade proporcional ao peso. Com um candidato só o
@@ -490,13 +490,47 @@ implementá-lo antes de investir mais na varredura.
 levar o pool a centenas de MB, e cada reingestão vira um blob novo no histórico
 do git.
 
-## Próximas etapas
+## Calibração
 
-5. Calibração — a ferramenta existe (`npm run sample`); falta o ciclo de
-   ajuste em cima dela, agora que os pesos de sorteio são o que mais move a
-   qualidade percebida.
+```bash
+npm run sample                                   # lê uma amostra
+npm run --silent sample -- --json > amostra.json # para julgar
+npm run sample -- --judge=amostra.json           # mede o que você julgou
+```
 
-O que ficou por fazer, em ordem de valor:
+A amostra sai **pelo mesmo caminho do app**: os pesos por fonte, os modos e o
+filtro de tema valem ali igual. Amostrar o banco direto mostraria uma
+distribuição que o usuário nunca vê, e calibrar contra ela seria calibrar a
+coisa errada.
+
+O ciclo é: gerar a amostra em JSON, marcar `"bom": true` ou `false` em cada
+item, e rodar `--judge`. Ele devolve a taxa de acerto total e por fonte, que é
+o que diz qual peso mexer.
+
+### A rodada que ajustou os pesos
+
+Quarenta artigos, um julgamento, critério "eu abriria este artigo?":
+
+| fonte | acertos | taxa | participação |
+| --- | --- | --- | --- |
+| Artigos peculiares | 21/21 | 100% | 53% |
+| "Você sabia?" | 4/18 | 22% | 45% |
+| varredura ampla | 0/1 | 0% | 3% |
+| **total** | **25/40** | **63%** | |
+
+A varredura ampla caiu para um fio de sorteio. Além dessa rodada ela já tinha a
+pior mediana de qualidade (57,1 contra 80,9 e 73,9) e o pior custo por artigo
+na ingestão — 0,42 artigo por request, contra 18,4 da lista peculiar. O "Você
+sabia?" segue com peso alto apesar da taxa menor: 22% sobre 121 mil artigos
+são cerca de 30 mil bons em números absolutos, e é o que dá variedade a um pool
+que sem ele seria só esquisitice.
+
+Uma rodada, um julgamento, quarenta artigos: serve para mover os pesos na
+direção certa, não para afirmar a taxa com precisão.
+
+## O que ficou por fazer
+
+Em ordem de valor:
 
 - **Audiência para o resto do pool.** Só 12% tem, e é o que limita o modo
   surpresa. São 110 mil requests numa API que já recusou tudo por horas.

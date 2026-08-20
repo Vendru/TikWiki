@@ -1,11 +1,16 @@
 {
   "$comment": "Como o sorteio pondera. Separado do score de propósito: score é uma propriedade do artigo, peso de sorteio é uma decisão de produto sobre o que o usuário deve ver.",
 
-  "$porFonte": "O maior lever de qualidade do produto, e o mais barato. Lendo 30 artigos sorteados uniformemente eu abriria cerca de 8; lendo 8 sorteados só da lista de Artigos peculiares, 8. A lista é 3,3% do pool e concentra o melhor conteúdo, então no sorteio uniforme ela aparece em 3 de cada 100. Levando-a a metade dos sorteios, a taxa de acerto esperada vai de 27% para cerca de 53%. Não há custo: com 4.202 artigos a 50% do sorteio, quem vir 50 artigos por sessão precisa de 168 sessões para esgotá-la.",
+  "$porFonte": "O maior lever de qualidade do produto, e o mais barato. A lista de Artigos peculiares é 3,3% do pool e concentra o melhor conteúdo: no sorteio uniforme ela apareceria em 3 de cada 100. Não há custo em favorecê-la — com 4.202 artigos a 60% do sorteio, quem vir 50 artigos por sessão precisa de 140 sessões para esgotá-la.",
+
+  "$calibracao": "Uma rodada de julgamento à mão sobre 40 artigos sorteados pelo caminho real do app (npm run sample) deu 63% de acerto no total, com 100% (21/21) da lista peculiar, 22% (4/18) do 'Você sabia?' e 0% (0/1) da varredura ampla. Daí este ajuste: a varredura cai para um fio, porque além dessa rodada ela já tinha a pior mediana de qualidade (57,1 contra 80,9 e 73,9) e o pior custo por artigo na ingestão. O 'Você sabia?' segue com peso alto apesar da taxa menor: são cerca de 30 mil artigos bons em números absolutos, e é o que dá variedade a um pool que sem ele seria só esquisitice.",
+
+  "$evidencia": "Uma rodada, um julgamento, 40 artigos. Serve para mover os pesos na direção certa, não para afirmar a taxa com precisão. Refaça com npm run sample -- --json e --judge depois de qualquer mudança.",
+
   "porFonte": {
-    "unusual": 50,
-    "dyk": 45,
-    "random": 5
+    "unusual": 60,
+    "dyk": 39,
+    "random": 1
   },
 
   "$candidatos": "O sorteio ponderado tira K candidatos uniformemente e escolhe entre eles com probabilidade proporcional ao peso. K=1 seria sorteio uniforme; K muito alto devolveria sempre o mesmo topo, que é justamente o que a especificação pede para evitar. 24 pondera de verdade sem travar no topo, e custa 24 buscas por índice em vez de varrer 125 mil linhas.",
