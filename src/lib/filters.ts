@@ -8,9 +8,27 @@ import { CONFIG_DIR } from "./config";
  * sweep. Fontes curadas não passam por aqui.
  */
 
+/** Quais grupos de regra valem para artigos de fonte curada. */
+export interface CuratedRules {
+  titlePatterns: boolean;
+  minBytes: boolean;
+  categoryPatterns: boolean;
+  content: boolean;
+}
+
+const CURATED_PADRAO: CuratedRules = {
+  titlePatterns: false,
+  minBytes: false,
+  categoryPatterns: false,
+  content: false,
+};
+
 export interface FilterConfig {
   minBytes: { value: number };
   minProseRatio: { value: number };
+  curated?: Partial<CuratedRules> & {
+    porFonte?: Record<string, Partial<CuratedRules>>;
+  };
   // Os grupos aceitam também chaves `$…` de documentação, descartadas ao compilar.
   titlePatterns: Record<string, unknown>;
   categoryPatterns: Record<string, unknown>;
@@ -21,6 +39,9 @@ export interface FilterConfig {
 export interface CompiledFilters {
   minBytes: number;
   minProseRatio: number;
+  curated: CuratedRules;
+  /** Exceções por fonte: curadorias diferentes merecem confiança diferente. */
+  curatedPorFonte: Record<string, CuratedRules>;
   title: Array<{ rule: string; patterns: RegExp[] }>;
   category: Array<{ rule: string; patterns: RegExp[] }>;
   stub: RegExp[];
@@ -43,9 +64,19 @@ const compileGroup = (groups: Record<string, unknown>) =>
     }));
 
 export function compileFilters(cfg: FilterConfig): CompiledFilters {
+  const { porFonte, ...base } = cfg.curated ?? {};
+  const curated = { ...CURATED_PADRAO, ...base };
+
   return {
     minBytes: cfg.minBytes.value,
     minProseRatio: cfg.minProseRatio.value,
+    curated,
+    curatedPorFonte: Object.fromEntries(
+      Object.entries(porFonte ?? {}).map(([fonte, regras]) => [
+        fonte,
+        { ...curated, ...regras },
+      ]),
+    ),
     title: compileGroup(cfg.titlePatterns),
     category: compileGroup(cfg.categoryPatterns),
     stub: cfg.stubPatterns.map((p) => new RegExp(p, "i")),
@@ -115,17 +146,34 @@ export function proseRatio(wikitext: string): number {
  * A ordem é por custo: as primeiras usam só o que a consulta básica já
  * trouxe, e as últimas dependem do wikitext. Devolver a primeira reprovação
  * (em vez de todas) é o que faz o relatório somar 100% dos descartes.
+ *
+ * Com `curated`, só rodam os grupos que config/filters.json marcar como
+ * válidos para fonte curada, e `source` permite afrouxar ou apertar por fonte:
+ * uma lista de milhares de itens escolhidos a dedo merece mais confiança que
+ * um arquivo de centenas de milhares. Namespace e desambiguação valem sempre:
+ * não são juízo de qualidade, e sim "isto não é um artigo".
  */
-export function reject(c: Candidate, f: CompiledFilters): Rejection {
+export function reject(
+  c: Candidate,
+  f: CompiledFilters,
+  opts: { curated?: boolean; source?: string } = {},
+): Rejection {
+  const regras =
+    (opts.source ? f.curatedPorFonte[opts.source] : undefined) ?? f.curated;
+  const vale = (grupo: keyof CuratedRules) => !opts.curated || regras[grupo];
+
   if (c.ns !== 0) return "namespace";
   if (c.isDisambiguation) return "desambiguacao_pageprop";
-  if (c.bytes < f.minBytes) return "bytes_minimo";
 
-  for (const { rule, patterns } of f.title) {
-    if (patterns.some((p) => p.test(c.title))) return `titulo:${rule}`;
+  if (vale("minBytes") && c.bytes < f.minBytes) return "bytes_minimo";
+
+  if (vale("titlePatterns")) {
+    for (const { rule, patterns } of f.title) {
+      if (patterns.some((p) => p.test(c.title))) return `titulo:${rule}`;
+    }
   }
 
-  if (c.categories?.length) {
+  if (vale("categoryPatterns") && c.categories?.length) {
     for (const { rule, patterns } of f.category) {
       if (c.categories.some((cat) => patterns.some((p) => p.test(cat)))) {
         return `categoria:${rule}`;
@@ -133,7 +181,7 @@ export function reject(c: Candidate, f: CompiledFilters): Rejection {
     }
   }
 
-  if (c.wikitext) {
+  if (vale("content") && c.wikitext) {
     if (f.stub.some((p) => p.test(c.wikitext!))) return "esboco";
 
     const ratio = proseRatio(c.wikitext);

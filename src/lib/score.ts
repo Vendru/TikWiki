@@ -102,25 +102,26 @@ export function qualityScore(
 }
 
 /**
- * Qualidade descontada da audiência.
+ * Qualidade descontada da audiência, ou `null` quando não dá para afirmar.
  *
- * Sem dado de audiência o desconto não se aplica: não dá para afirmar que o
- * artigo é obscuro, então ele fica com a própria qualidade.
+ * Surpresa é uma afirmação sobre audiência: "isto é bom e quase ninguém lê".
+ * Sem o dado, a afirmação não se sustenta, e devolver a qualidade no lugar
+ * dela seria justamente afirmá-la — um artigo de qualidade alta e audiência
+ * desconhecida terminava no topo do ranking de surpresa, acima de todos os que
+ * de fato foram medidos e penalizados.
  */
 export function surpriseScore(
   m: Metrics,
   cfg: ScoreConfig,
   quality: number,
-): number {
-  if (m.pageviews === null || m.pageviews === undefined) return quality;
+): number | null {
+  if (m.pageviews === null || m.pageviews === undefined) return null;
 
   // Audiência quase nula num artigo bem desenvolvido contradiz o resto das
   // métricas, e quase sempre significa que o título foi renomeado e o
-  // histórico ficou com o nome antigo. Tratar como não medida evita que o
-  // artefato lidere o ranking de surpresa, que foi o que aconteceu com
-  // "Foreign policy of the Modi government" e suas 1,1 visualizações por mês.
+  // histórico ficou com o nome antigo.
   const minimo = cfg.surprise.pageviewsMinimo ?? 0;
-  if (m.pageviews < minimo) return quality;
+  if (m.pageviews < minimo) return null;
 
   const penalty =
     cfg.surprise.pageviewsWeight *
@@ -137,7 +138,7 @@ export function scoreArticle(
   m: Metrics,
   cfg: ScoreConfig,
   opts: { curated?: boolean } = {},
-): { quality: number; surprise: number } {
+): { quality: number; surprise: number | null } {
   const quality = qualityScore(m, cfg, opts);
   return { quality, surprise: surpriseScore(m, cfg, quality) };
 }

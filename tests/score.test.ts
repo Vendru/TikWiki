@@ -138,38 +138,40 @@ describe("surpriseScore", () => {
     const q = qualityScore(cheio, cfg);
     const obscuro = surpriseScore({ ...cheio, pageviews: 20 }, cfg, q);
     const popular = surpriseScore({ ...cheio, pageviews: 500000 }, cfg, q);
-    expect(obscuro).toBeGreaterThan(popular);
+    expect(obscuro!).toBeGreaterThan(popular!);
   });
 
-  it("audiência abaixo do mínimo conta como não medida", () => {
+  it("audiência abaixo do mínimo não rende surpresa nenhuma", () => {
     const q = qualityScore(cheio, cfg);
     const minimo = cfg.surprise.pageviewsMinimo ?? 0;
-    // Contradiz as demais métricas: quase sempre é título renomeado, e sem a
-    // trava o artefato lidera o ranking de surpresa.
-    expect(surpriseScore({ ...cheio, pageviews: minimo - 1 }, cfg, q)).toBe(q);
+    // Contradiz as demais métricas: quase sempre é título renomeado.
+    expect(surpriseScore({ ...cheio, pageviews: minimo - 1 }, cfg, q)).toBeNull();
     expect(surpriseScore({ ...cheio, pageviews: minimo + 50 }, cfg, q)).toBeLessThan(q);
   });
 
-  it("sem dado de audiência, surpresa cai para qualidade", () => {
+  it("sem dado de audiência, não há surpresa a afirmar", () => {
+    // Devolver a qualidade seria afirmar que é obscuro sem tê-lo medido, e o
+    // artigo terminava acima de todos os que foram medidos e penalizados.
     const q = qualityScore(cheio, cfg);
-    expect(surpriseScore({ ...cheio, pageviews: null }, cfg, q)).toBe(q);
-    expect(surpriseScore({ ...cheio, pageviews: undefined }, cfg, q)).toBe(q);
+    expect(surpriseScore({ ...cheio, pageviews: null }, cfg, q)).toBeNull();
+    expect(surpriseScore({ ...cheio, pageviews: undefined }, cfg, q)).toBeNull();
   });
 
   it("inverte o ranking entre dois artigos de mesma qualidade", () => {
     const a = scoreArticle({ ...cheio, pageviews: 50 }, cfg);
     const b = scoreArticle({ ...cheio, pageviews: 100000 }, cfg);
     expect(a.quality).toBe(b.quality);
-    expect(a.surprise).toBeGreaterThan(b.surprise);
+    expect(a.surprise!).toBeGreaterThan(b.surprise!);
   });
 
   it("um artigo ruim e obscuro não vence um ótimo e obscuro", () => {
-    const ruim = scoreArticle({ bytes: 6000, backlinks: 1, pageviews: 5 }, cfg);
+    // Audiência acima do mínimo nos dois, senão a surpresa nem existe.
+    const ruim = scoreArticle({ bytes: 6000, backlinks: 1, pageviews: 50 }, cfg);
     const otimo = scoreArticle(
-      { bytes: 40000, langlinks: 40, backlinks: 300, refs: 60, sections: 12, pageviews: 5 },
+      { bytes: 40000, langlinks: 40, backlinks: 300, refs: 60, sections: 12, pageviews: 50 },
       cfg,
     );
-    expect(otimo.surprise).toBeGreaterThan(ruim.surprise);
+    expect(otimo.surprise!).toBeGreaterThan(ruim.surprise!);
   });
 });
 
@@ -177,7 +179,7 @@ describe("scoreArticle", () => {
   it("devolve os dois scores de uma vez", () => {
     const { quality, surprise } = scoreArticle(cheio, cfg);
     expect(quality).toBeGreaterThan(0);
-    expect(surprise).toBeLessThan(quality);
+    expect(surprise!).toBeLessThan(quality);
   });
 
   it("arredonda para duas casas, para o banco não guardar ruído", () => {

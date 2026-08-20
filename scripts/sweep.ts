@@ -216,7 +216,7 @@ async function main() {
       thumbnailUrl: f.thumbnailUrl,
       ...metrics,
       scoreQuality: quality,
-      scoreSurprise: surprise,
+      scoreSurprise: surprise ?? undefined,
       source: SOURCE,
       curated: false,
     });

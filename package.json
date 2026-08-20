@@ -40,6 +40,7 @@
     "pool:unpack": "tsx scripts/pool-unpack.ts",
     "prebuild": "tsx scripts/pool-unpack.ts",
     "predev": "tsx scripts/pool-unpack.ts",
-    "tidy:notes": "tsx scripts/tidy-notes.ts"
+    "tidy:notes": "tsx scripts/tidy-notes.ts",
+    "prune": "tsx scripts/prune-pool.ts"
   }
 }

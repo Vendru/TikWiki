@@ -233,6 +233,79 @@ describe("reject — wikitext", () => {
   });
 });
 
+describe("reject — fonte curada", () => {
+  const curada = { curated: true };
+
+  it("continua derrubando o que não é artigo", () => {
+    // Namespace e desambiguação não são juízo de qualidade: valem sempre.
+    expect(reject({ ...base, ns: 4 }, f, curada)).toBe("namespace");
+    expect(reject({ ...base, isDisambiguation: true }, f, curada)).toBe(
+      "desambiguacao_pageprop",
+    );
+  });
+
+  it("isenta do corte de bytes, que é o ponto da isenção", () => {
+    // Artigo curto de fonte curada é bom — é o caso que a isenção protege.
+    expect(reject({ ...base, bytes: 800 }, f, curada)).toBeUndefined();
+    expect(reject({ ...base, bytes: 800 }, f)).toBe("bytes_minimo");
+  });
+
+  it("por padrão, isenta a fonte curada das regras de título", () => {
+    expect(
+      reject({ ...base, title: "List of generation III Pokémon" }, f, curada),
+    ).toBeUndefined();
+  });
+
+  it("aperta as regras de título no DYK, que tem barra mais baixa", () => {
+    // 2.443 artigos de rotina chegavam ao topo do modo surpresa como
+    // delegações olímpicas obscuras.
+    const dyk = { curated: true, source: "dyk" };
+    expect(reject({ ...base, title: "List of generation III Pokémon" }, f, dyk)).toBe(
+      "titulo:lista",
+    );
+    expect(reject({ ...base, title: "2005 English cricket season" }, f, dyk)).toBe(
+      "titulo:evento_datado",
+    );
+    expect(reject({ ...base, title: "Rammstein discography" }, f, dyk)).toBe(
+      "titulo:discografia_elenco",
+    );
+  });
+
+  it("preserva as escolhas deliberadas da lista peculiar", () => {
+    // Estas 23 entradas parecem rotina para a regra e não são: a eleição
+    // liberiana de 1927 é a mais fraudulenta já registrada, e no GP dos
+    // Estados Unidos de 2005 só seis carros largaram. A curadoria sabia
+    // distinguir; a regra não.
+    const unusual = { curated: true, source: "unusual" };
+    for (const title of [
+      "1927 Liberian general election",
+      "2005 United States Grand Prix",
+      "2021 Belgian Grand Prix",
+      "Charles Manson discography",
+    ]) {
+      expect(reject({ ...base, title }, f, unusual)).toBeUndefined();
+    }
+  });
+
+  it("o DYK continua isento do corte de bytes", () => {
+    const dyk = { curated: true, source: "dyk" };
+    expect(reject({ title: "Klondike bar", ns: 0, bytes: 2400 }, f, dyk)).toBeUndefined();
+  });
+
+  it("não aplica categorias nem conteúdo na fonte curada", () => {
+    expect(
+      reject({ ...base, categories: ["Main-belt asteroids"] }, f, curada),
+    ).toBeUndefined();
+    expect(
+      reject({ ...base, wikitext: "{{Europe-geo-stub}}" }, f, curada),
+    ).toBeUndefined();
+  });
+
+  it("poupa o artigo peculiar curto que a isenção existe para proteger", () => {
+    expect(reject({ title: "Klondike bar", ns: 0, bytes: 2400 }, f, curada)).toBeUndefined();
+  });
+});
+
 describe("RejectionReport", () => {
   it("soma aprovados e rejeitados até o total", () => {
     const r = new RejectionReport();

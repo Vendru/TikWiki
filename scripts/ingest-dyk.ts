@@ -19,6 +19,7 @@ import {
 } from "../src/lib/sources/dyk";
 import { type ArticleRecord, finishRun, startRun, upsertArticles } from "../src/lib/db/articles";
 import { finalizeDb, openDb } from "../src/lib/db";
+import { loadFilters, reject } from "../src/lib/filters";
 
 const args = process.argv.slice(2);
 const refresh = args.includes("--refresh");
@@ -103,7 +104,14 @@ async function main() {
   console.log(`Já no pool: ${selecionadas.length - pendentes.length}`);
   console.log(`A buscar: ${pendentes.length}\n`);
 
-  const descartes = { inexistente: 0, namespace: 0, desambiguacao: 0, duplicado: 0 };
+  const filtros = loadFilters();
+  const descartes: Record<string, number> = {
+    inexistente: 0,
+    namespace: 0,
+    desambiguacao: 0,
+    duplicado: 0,
+    filtro: 0,
+  };
   const pageIdsVistos = new Set<number>();
   let gravados = 0;
   let processados = 0;
@@ -136,6 +144,18 @@ async function main() {
       }
       if (f.isDisambiguation) {
         descartes.desambiguacao++;
+        continue;
+      }
+      // Fonte curada, mas não isenta de tudo: o arquivo do "Você sabia?" traz
+      // listas, temporadas esportivas e discografias em volume, e config
+      // decide quais grupos de regra ainda valem aqui.
+      const reprovado = reject(
+        { title: f.title, ns: f.ns, bytes: f.bytes },
+        filtros,
+        { curated: true, source: SOURCE },
+      );
+      if (reprovado) {
+        descartes.filtro = (descartes.filtro ?? 0) + 1;
         continue;
       }
       if (pageIdsVistos.has(f.pageId)) {

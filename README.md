@@ -15,26 +15,37 @@ read-only em produção.
 
 ## Estado atual
 
-Etapas 1 a 3 concluídas: pipeline da lista de Artigos peculiares, app web
-sorteando desse pool, e o filtro, o score e a varredura ampla.
+Etapas 1 a 3 concluídas, com as três fontes de candidatos ingeridas: a lista de
+Artigos peculiares, o arquivo do "Você sabia?" e a varredura ampla.
 
 | Métrica | Valor |
 | --- | --- |
-| Artigos no pool (`en`) | 4.330 |
-| Da lista curada / da varredura | 4.202 / 128 |
-| Com resumo | 4.330 (100%) |
-| Com nota do curador | 4.151 |
-| Com métricas e score | 4.330 (100%) |
-| Tamanho do arquivo | ~7 MB |
+| Artigos no pool (`en`) | 125.430 |
+| Do "Você sabia?" | 121.101 |
+| Da lista de Artigos peculiares | 4.202 |
+| Da varredura ampla | 127 |
+| Com score de qualidade | 125.430 (100%) |
+| Com score de surpresa | 14.948 (12%) |
+| `data/pool.db.gz` | 63,2 MB |
 
 ## Como rodar
 
 ```bash
 npm install
-npm run ingest:unusual     # popula data/pool.db
-npm run dev                # app em http://localhost:3000
-npm test                   # parsing, limpeza, sorteio e schema
+npm run dev                # app em http://localhost:3000 (extrai o pool antes)
+npm test
 npm run typecheck
+
+# pipeline, fora do request
+npm run ingest:unusual                      # lista de Artigos peculiares
+npm run ingest:dyk                          # arquivo do "Você sabia?"
+npm run sweep -- --n=800                    # varredura ampla
+npm run enrich -- --no-backlinks --no-pageviews   # métricas em lote, pool inteiro
+npm run enrich -- --band=90:99 --no-backlinks     # audiência na faixa que rende
+npm run enrich -- --score-only              # repontua sem tocar na rede
+npm run prune                               # remove o que as regras atuais reprovam
+npm run tidy:notes                          # reaplica a limpeza às notas gravadas
+npm run pool:pack                           # gera data/pool.db.gz para versionar
 ```
 
 A ingestão aceita `--refresh` (ignora o cache em disco) e `--limit=N` (processa
@@ -47,7 +58,7 @@ só os N primeiros títulos, para validar rápido).
 | `WIKI_LANG` | `en` | Idioma alvo da wiki |
 | `WIKI_CONTACT` | URL do repo | Contato no `User-Agent`, exigido pela política de acesso da Wikimedia |
 | `WIKI_INTERVAL_MS` | `200` | Intervalo mínimo entre requests |
-| `WIKI_MAX_RETRIES` | `5` | Tentativas em 429/5xx antes de desistir |
+| `WIKI_MAX_RETRIES` | `8` | Tentativas em 429/5xx antes de desistir |
 | `TIKWIKI_DB` | `data/pool.db` | Caminho do pool |
 | `TIKWIKI_CACHE` | `.cache/wiki` | Cache das respostas cruas |
 
@@ -114,8 +125,29 @@ de `list=random`:
 | 8.000 | 66,3% | 26,5% | 0,95:1 |
 
 6.000 é onde a troca marginal vira: passar para 8.000 corta só 10,2pp a mais de
-lixo custando 10,7pp a mais de artigo bom. O filtro não se aplica às fontes
-curadas, que passam direto.
+lixo custando 10,7pp a mais de artigo bom.
+
+### Isenção das fontes curadas, por fonte
+
+A especificação isenta as fontes curadas do filtro. Isso vale para a lista de
+Artigos peculiares — 4.202 itens escolhidos a dedo — mas não para o arquivo do
+"Você sabia?", que tem 121 mil e barra muito mais baixa.
+
+Medido no pool, as regras de título derrubariam **2.443 artigos do DYK**: 1.388
+listas como "List of generation III Pokémon", 924 eventos datados como "2005
+English cricket season", 110 discografias. Chegavam ao topo do modo surpresa
+como delegações olímpicas obscuras.
+
+As mesmas regras derrubariam **23 da lista peculiar**, e ali são escolhas
+deliberadas: "1927 Liberian general election" é a eleição mais fraudulenta já
+registrada, "2005 United States Grand Prix" é a corrida em que só seis carros
+largaram. A regra não distingue essas de uma temporada de rotina; a curadoria
+distinguia.
+
+Por isso a isenção é **por fonte** em `config/filters.json`: o DYK responde às
+regras de título, a lista peculiar não. O corte de bytes segue isento nas duas
+— são 15.133 artigos curtos do DYK, e artigo curto do DYK ainda é bom, que é
+justamente o que a isenção existe para proteger.
 
 ### Limpeza do resumo
 
@@ -362,3 +394,15 @@ do git.
 
 4. Tópicos e modos de sorteio
 5. Script de calibração
+
+O sorteio segue uniforme. A ponderação por score é da etapa 4, e há três coisas
+a resolver lá:
+
+- **`score_surprise` é nulo em 88% do pool.** Surpresa é uma afirmação sobre
+  audiência, e sem o dado ela não se sustenta. O modo surpresa precisa sortear
+  só entre os 14.948 medidos, em vez de tratar o nulo como zero.
+- **A escala de surpresa tem valores negativos**, então precisa ser deslocada
+  antes de virar peso de sorteio.
+- **Volume vence score.** Com o DYK sendo 96% do pool, o bônus de curadoria não
+  segura a lista peculiar no sorteio ponderado; se ela deve ser a espinha
+  dorsal, isso vira ponderação explícita por fonte.
