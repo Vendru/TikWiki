@@ -19,7 +19,13 @@ export interface Term {
 export interface ScoreConfig {
   quality: Record<string, Term>;
   curatedBonus: { value: number };
-  surprise: { pageviewsWeight: number; pageviewsScale: number; pageviewsRef: number };
+  surprise: {
+    pageviewsWeight: number;
+    pageviewsScale: number;
+    pageviewsRef: number;
+    /** Abaixo disto a audiência é tratada como não medida. */
+    pageviewsMinimo?: number;
+  };
 }
 
 export function loadScoreConfig(): ScoreConfig {
@@ -107,6 +113,15 @@ export function surpriseScore(
   quality: number,
 ): number {
   if (m.pageviews === null || m.pageviews === undefined) return quality;
+
+  // Audiência quase nula num artigo bem desenvolvido contradiz o resto das
+  // métricas, e quase sempre significa que o título foi renomeado e o
+  // histórico ficou com o nome antigo. Tratar como não medida evita que o
+  // artefato lidere o ranking de surpresa, que foi o que aconteceu com
+  // "Foreign policy of the Modi government" e suas 1,1 visualizações por mês.
+  const minimo = cfg.surprise.pageviewsMinimo ?? 0;
+  if (m.pageviews < minimo) return quality;
+
   const penalty =
     cfg.surprise.pageviewsWeight *
     10 *

@@ -141,6 +141,15 @@ describe("surpriseScore", () => {
     expect(obscuro).toBeGreaterThan(popular);
   });
 
+  it("audiência abaixo do mínimo conta como não medida", () => {
+    const q = qualityScore(cheio, cfg);
+    const minimo = cfg.surprise.pageviewsMinimo ?? 0;
+    // Contradiz as demais métricas: quase sempre é título renomeado, e sem a
+    // trava o artefato lidera o ranking de surpresa.
+    expect(surpriseScore({ ...cheio, pageviews: minimo - 1 }, cfg, q)).toBe(q);
+    expect(surpriseScore({ ...cheio, pageviews: minimo + 50 }, cfg, q)).toBeLessThan(q);
+  });
+
   it("sem dado de audiência, surpresa cai para qualidade", () => {
     const q = qualityScore(cheio, cfg);
     expect(surpriseScore({ ...cheio, pageviews: null }, cfg, q)).toBe(q);

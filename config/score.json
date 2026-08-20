@@ -58,6 +58,8 @@
     "pageviewsWeight": 10.0,
     "pageviewsScale": 1,
     "pageviewsRef": 17205,
+    "pageviewsMinimo": 10,
+    "$pageviewsMinimo": "Abaixo de 10 visualizações mensais a audiência é tratada como não medida. Num artigo da faixa p90–p99 de qualidade, audiência quase nula contradiz todas as outras métricas e quase sempre significa título renomeado, com o histórico preso ao nome antigo. Atinge 1 artigo em 15.343 medidos, mas era justamente o primeiro colocado em surpresa: 'Foreign policy of the Modi government', com 1,1 visualização por mês.",
     "$formula": "score_surprise = score_quality - pageviewsWeight * 10 * log10(1 + pageviews) / log10(1 + pageviewsRef). Um artigo no p90 de audiência perde exatamente pageviewsWeight * 10 pontos.",
     "$why": "Qualidade alta com pouca audiência é onde mora a sensação de descoberta; artigo popular o usuário provavelmente já conhece.",
     "$calibracao": "Escolhido olhando o topo do ranking a cada peso, com o pool inteiro repontuado antes de medir. Até 8, o topo ainda traz 'Human', 'American Samoa' e 'Christmas Island' — nenhum deles é descoberta. Em 10 nenhum artigo de mais de dez mil visualizações mensais sobra no topo. De 12 para cima o primeiro colocado vira 'Pakistan Muslim League – Functional': obscuridade pura, que correlaciona com tédio.",
