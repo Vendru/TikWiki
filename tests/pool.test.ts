@@ -203,6 +203,72 @@ describe("randomArticle — filtro de tema", () => {
     const { randomArticle } = await load();
     expect(randomArticle({ lang: "en", topic: "inexistente" })).toBeUndefined();
   });
+
+  it("não repete enquanto o tema ainda tem artigo não visto", async () => {
+    // Regressão real: quando a fonte sorteada esgotava dentro do tema, o
+    // sorteio caía nos candidatos já vistos e podia devolver o artigo que
+    // estava na tela. Para quem usa, o botão "outro artigo" parecia morto.
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "tikwiki-esgota-"));
+    const file = path.join(dir2, "esgota.db");
+    const seed2 = openDb({ file });
+
+    // Uma fonte com um artigo só: ela esgota no primeiro clique, e a outra
+    // fonte precisa assumir em vez de o sorteio repetir.
+    upsertArticles(seed2, [
+      {
+        lang: "en",
+        pageId: 1,
+        title: "Único da fonte pequena",
+        url: "https://en.wikipedia.org/wiki/U1",
+        source: "unusual",
+        curated: true,
+      },
+      ...Array.from({ length: 9 }, (_, i) => ({
+        lang: "en",
+        pageId: 100 + i,
+        title: `Outro ${i}`,
+        url: `https://en.wikipedia.org/wiki/O${i}`,
+        source: "dyk",
+        curated: true,
+      })),
+    ]);
+
+    seed2.prepare(`INSERT INTO topics (id, slug, label) VALUES (1, 'tema', 'Tema')`).run();
+    const vincula = seed2.prepare(
+      `INSERT INTO article_topics (lang, page_id, topic_id, score) VALUES ('en', ?, 1, 1)`,
+    );
+    const ordena = seed2.prepare(
+      `INSERT INTO topic_index (lang, topic_id, source, ord, page_id) VALUES ('en', 1, ?, ?, ?)`,
+    );
+    vincula.run(1);
+    ordena.run("unusual", 0, 1);
+    for (let i = 0; i < 9; i++) {
+      vincula.run(100 + i);
+      ordena.run("dyk", i, 100 + i);
+    }
+    seed2.close();
+
+    process.env.TIKWIKI_DB = file;
+    vi.resetModules();
+    const { randomArticle } = await import("../src/lib/db/pool");
+
+    // Percorre o tema inteiro: as 10 têm que sair sem nenhuma repetição.
+    const vistos: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const a = randomArticle({ lang: "en", topic: "tema", exclude: vistos });
+      expect(a).toBeDefined();
+      expect(vistos).not.toContain(a!.pageId);
+      vistos.push(a!.pageId);
+    }
+    expect(new Set(vistos).size).toBe(10);
+
+    // Exaurido de verdade, repetir é melhor que devolver nada.
+    expect(randomArticle({ lang: "en", topic: "tema", exclude: vistos })).toBeDefined();
+
+    process.env.TIKWIKI_DB = dbFile;
+    vi.resetModules();
+    fs.rmSync(dir2, { recursive: true, force: true });
+  });
 });
 
 describe("poolSize", () => {

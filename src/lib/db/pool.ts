@@ -301,12 +301,36 @@ function porTopico(
   }
 
   const disponiveis = candidatos.filter((r) => !exclude.has(r.page_id));
-  const escolhido = escolherPorPeso(
-    (disponiveis.length ? disponiveis : candidatos).map(paraCandidato),
-    modo,
-    cfg,
-  );
-  return escolhido ? toArticle(escolhido) : undefined;
+  if (disponiveis.length) {
+    const escolhido = escolherPorPeso(disponiveis.map(paraCandidato), modo, cfg);
+    if (escolhido) return toArticle(escolhido);
+  }
+
+  // A fonte sorteada esgotou dentro do tema — o que acontece cedo em tema
+  // pequeno, e mais cedo ainda no modo surpresa, onde só 12% do pool tem
+  // audiência medida. Cair direto no `candidatos` devolvia um artigo já visto,
+  // muitas vezes o que está na tela: o botão trocava o artigo por ele mesmo e
+  // parecia travado. Antes de repetir, procura no tema inteiro, sem prender o
+  // sorteio à fonte que acabou.
+  const buracos = exclude.size
+    ? ` AND a.page_id NOT IN (${[...exclude].map(() => "?").join(",")})`
+    : "";
+  const outro = db()
+    .prepare(
+      `SELECT ${COLUNAS_A}
+         FROM articles a
+         JOIN article_topics at ON at.lang = a.lang AND at.page_id = a.page_id
+         JOIN topics t ON t.id = at.topic_id
+        WHERE a.lang = ? AND t.slug = ?${filtro}${buracos}
+        ORDER BY RANDOM() LIMIT 1`,
+    )
+    .get(lang, topic, ...exclude) as Row | undefined;
+  if (outro) return toArticle(outro);
+
+  // Só agora, com o tema de fato exaurido, repetir é melhor que não devolver
+  // nada — e o app avisa na tela quando nem isso existe.
+  const repetido = escolherPorPeso(candidatos.map(paraCandidato), modo, cfg);
+  return repetido ? toArticle(repetido) : undefined;
 }
 
 export interface Topico {
