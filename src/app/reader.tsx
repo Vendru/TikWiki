@@ -41,20 +41,41 @@ const ROTULO_MODO: Record<Modo, string> = {
   surprise: "Mais obscuros",
 };
 
+/**
+ * Resultado da busca, com o motivo quando falha.
+ *
+ * Devolver `undefined` para todo tipo de falha fazia o clique não produzir
+ * efeito nenhum: sem artigo novo, sem mensagem, sem nada na tela. O usuário
+ * não tem como distinguir "acabou o tema" de "a rede caiu" de "o botão está
+ * quebrado" — e a única saída era recarregar a página.
+ */
+type Resultado =
+  | { ok: true; article: PoolArticle }
+  | { ok: false; motivo: string };
+
 async function fetchArticle(
   exclude: number[],
   filtros: Filtros,
-): Promise<PoolArticle | undefined> {
+): Promise<Resultado> {
   const params = new URLSearchParams({
     exclude: exclude.slice(-EXCLUDE_LIMIT).join(","),
     mode: filtros.mode,
   });
   if (filtros.topic) params.set("topic", filtros.topic);
 
-  const res = await fetch(`/api/random?${params}`, { cache: "no-store" });
-  if (!res.ok) return undefined;
-  const body = (await res.json()) as { article?: PoolArticle };
-  return body.article;
+  try {
+    const res = await fetch(`/api/random?${params}`, { cache: "no-store" });
+    if (!res.ok) {
+      const corpo = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, motivo: corpo.error ?? `A busca falhou (${res.status}).` };
+    }
+    const body = (await res.json()) as { article?: PoolArticle };
+    if (!body.article) return { ok: false, motivo: "A resposta veio sem artigo." };
+    return { ok: true, article: body.article };
+  } catch {
+    // fetch rejeita em queda de rede, e o json() rejeita em resposta truncada.
+    return { ok: false, motivo: "Sem resposta do servidor." };
+  }
 }
 
 export default function Reader({
@@ -67,6 +88,7 @@ export default function Reader({
   const [stack, setStack] = useState<PoolArticle[]>([initial]);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
   // "Surpreenda-me" é o padrão: tema vazio quer dizer o pool inteiro.
   const [filtros, setFiltros] = useState<Filtros>({ topic: "", mode: "mixed" });
 
@@ -80,8 +102,10 @@ export default function Reader({
 
   const prefetch = useCallback(async () => {
     if (prefetched.current) return;
-    const article = await fetchArticle(seen.current, filtros);
-    if (article) prefetched.current = article;
+    const r = await fetchArticle(seen.current, filtros);
+    // Falha no prefetch é silenciosa de propósito: o usuário não pediu nada
+    // ainda. O clique seguinte tenta de novo e aí sim reporta.
+    if (r.ok) prefetched.current = r.article;
   }, [filtros]);
 
   useEffect(() => {
@@ -93,8 +117,16 @@ export default function Reader({
   // filtro anterior, e entregá-lo faria o seletor parecer quebrado.
   useEffect(() => {
     prefetched.current = undefined;
+    setErro(null);
     void prefetch();
   }, [prefetch]);
+
+  const mostrar = useCallback((article: PoolArticle) => {
+    seen.current = [...seen.current, article.pageId].slice(-SEEN_LIMIT);
+    saveSeen(seen.current);
+    setStack((s) => [...s, article]);
+    setIndex((i) => i + 1);
+  }, []);
 
   const next = useCallback(async () => {
     // Se o usuário voltou, avançar refaz o caminho já percorrido.
@@ -106,25 +138,29 @@ export default function Reader({
     const ready = prefetched.current;
     if (ready) {
       prefetched.current = undefined;
-      seen.current = [...seen.current, ready.pageId].slice(-SEEN_LIMIT);
-      saveSeen(seen.current);
-      setStack((s) => [...s, ready]);
-      setIndex((i) => i + 1);
+      setErro(null);
+      mostrar(ready);
       void prefetch();
       return;
     }
 
     // Sem prefetch pronto (primeiro clique muito rápido, ou rede lenta).
+    setErro(null);
     setLoading(true);
-    const article = await fetchArticle(seen.current, filtros);
-    setLoading(false);
-    if (!article) return;
-    seen.current = [...seen.current, article.pageId].slice(-SEEN_LIMIT);
-    saveSeen(seen.current);
-    setStack((s) => [...s, article]);
-    setIndex((i) => i + 1);
-    void prefetch();
-  }, [index, stack.length, prefetch, filtros]);
+    try {
+      const r = await fetchArticle(seen.current, filtros);
+      if (!r.ok) {
+        setErro(r.motivo);
+        return;
+      }
+      mostrar(r.article);
+      void prefetch();
+    } finally {
+      // Sem o finally, uma exceção deixava o botão desabilitado em "Buscando…"
+      // até a página ser recarregada.
+      setLoading(false);
+    }
+  }, [index, stack.length, prefetch, filtros, mostrar]);
 
   const back = useCallback(() => {
     setIndex((i) => Math.max(0, i - 1));
@@ -247,14 +283,23 @@ export default function Reader({
         </div>
       </article>
 
-      <button
-        type="button"
-        onClick={() => void next()}
-        disabled={loading}
-        className="w-full rounded-full bg-accent px-6 py-4 text-base font-semibold text-ink transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
-      >
-        {loading ? "Buscando…" : "Outro artigo"}
-      </button>
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={() => void next()}
+          disabled={loading}
+          className="w-full rounded-full bg-accent px-6 py-4 text-base font-semibold text-ink transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
+        >
+          {loading ? "Buscando…" : erro ? "Tentar de novo" : "Outro artigo"}
+        </button>
+
+        {erro && (
+          <p role="status" className="text-center text-xs leading-relaxed text-accent/90">
+            {erro}
+            {filtros.topic && " Tente outro tema ou volte para “Surpreenda-me”."}
+          </p>
+        )}
+      </div>
 
       <footer className="pb-2 text-center text-xs leading-relaxed text-muted">
         Conteúdo da{" "}
