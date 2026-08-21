@@ -12,13 +12,18 @@
  *   --n=N          quantos artigos (padrão 30)
  *   --mode=M       quality, surprise ou mixed (padrão, igual ao app)
  *   --topic=SLUG   filtra por tema, como o seletor faria
- *   --json         imprime JSON, para anotar o julgamento em outra ferramenta
+ *   --out=ARQ      grava o JSON da amostra no arquivo
+ *   --json         imprime o JSON no stdout
  *   --judge=ARQ    lê um arquivo de julgamentos e mede a taxa de acerto
  *
- * O ciclo de calibração é: `npm run sample -- --json > amostra.json`, marcar
- * cada item com "bom": true ou false, e `npm run sample -- --judge=amostra.json`
+ * O ciclo de calibração é: `npm run sample -- --out=amostra.json`, marcar cada
+ * item com "bom": true ou false, e `npm run sample -- --judge=amostra.json`
  * para ver a taxa por fonte e por modo. Mudou um peso em config/draw.json?
  * Repita e compare.
+ *
+ * Prefira `--out` a redirecionar o stdout: o `npm run` escreve duas linhas de
+ * cabeçalho antes da saída do script, e com `>` elas entram no arquivo e
+ * quebram o JSON.
  */
 import fs from "node:fs";
 import { WIKI_LANG } from "../src/lib/config";
@@ -31,7 +36,8 @@ const valor = (nome: string) =>
 
 const n = Number(valor("n") ?? 30);
 const topic = valor("topic");
-const comoJson = args.includes("--json");
+const destino = valor("out");
+const comoJson = args.includes("--json") || Boolean(destino);
 const julgar = valor("judge");
 
 const modeArg = valor("mode") ?? "mixed";
@@ -47,13 +53,45 @@ interface Julgado {
   bom?: boolean | null;
 }
 
+/**
+ * Lê o arquivo de amostra, tolerando o cabeçalho do npm.
+ *
+ * `npm run sample -- --json > amostra.json` grava antes do JSON as duas linhas
+ * que o npm escreve no stdout, e o JSON.parse falha apontando para um '>' —
+ * um erro que não diz nada sobre a causa. Descartar o que vem antes da
+ * primeira chave resolve o arquivo que já foi gerado assim.
+ */
+function lerAmostra(arquivo: string): {
+  mode?: string;
+  topic?: string;
+  articles: Julgado[];
+} {
+  const bruto = fs.readFileSync(arquivo, "utf8");
+  const inicio = bruto.indexOf("{");
+  if (inicio < 0) {
+    console.error(`${arquivo} não contém JSON. Gere com: npm run sample -- --out=${arquivo}`);
+    process.exit(1);
+  }
+  try {
+    return JSON.parse(bruto.slice(inicio));
+  } catch (e) {
+    console.error(
+      `${arquivo} não é JSON válido: ${(e as Error).message}\n` +
+        `Se você editou à mão, confira vírgulas e aspas. Para gerar de novo:\n` +
+        `  npm run sample -- --out=${arquivo}`,
+    );
+    process.exit(1);
+  }
+}
+
 /** Lê os julgamentos e reporta a taxa de acerto por fonte. */
 function relatorio(arquivo: string): void {
-  const itens = JSON.parse(fs.readFileSync(arquivo, "utf8")) as {
-    mode?: string;
-    topic?: string;
-    articles: Julgado[];
-  };
+  const itens = lerAmostra(arquivo);
+
+  if (!Array.isArray(itens.articles)) {
+    console.error(`${arquivo} não tem a lista "articles".`);
+    process.exit(1);
+  }
 
   const julgados = itens.articles.filter(
     (a) => a.bom === true || a.bom === false,
@@ -117,26 +155,35 @@ if (julgar) {
   }
 
   if (comoJson) {
-    console.log(
-      JSON.stringify(
-        {
-          mode,
-          topic: topic ?? null,
-          $instrucao: 'Marque "bom": true ou false em cada artigo e rode npm run sample -- --judge=este-arquivo.json',
-          articles: artigos.map((a) => ({
-            title: a.title,
-            source: a.source,
-            note: a.curatorNote,
-            scoreQuality: a.scoreQuality,
-            scoreSurprise: a.scoreSurprise,
-            url: a.url,
-            bom: null,
-          })),
-        },
-        null,
-        2,
-      ),
+    const json = JSON.stringify(
+      {
+        mode,
+        topic: topic ?? null,
+        $instrucao: 'Marque "bom": true ou false em cada artigo e rode npm run sample -- --judge=este-arquivo.json',
+        articles: artigos.map((a) => ({
+          title: a.title,
+          source: a.source,
+          note: a.curatorNote,
+          scoreQuality: a.scoreQuality,
+          scoreSurprise: a.scoreSurprise,
+          url: a.url,
+          bom: null,
+        })),
+      },
+      null,
+      2,
     );
+
+    if (destino) {
+      fs.writeFileSync(destino, `${json}\n`);
+      console.log(
+        `${artigos.length} artigos em ${destino}.\n` +
+          `Marque "bom": true ou false em cada um e rode:\n` +
+          `  npm run sample -- --judge=${destino}`,
+      );
+    } else {
+      console.log(json);
+    }
   } else {
     const temasDisponiveis = topics(WIKI_LANG);
     console.log(
@@ -175,7 +222,7 @@ if (julgar) {
           .join(", "),
     );
     console.log(
-      `\nPara medir em vez de estimar: npm run sample -- --json > amostra.json,` +
+      `\nPara medir em vez de estimar: npm run sample -- --out=amostra.json,` +
         `\nmarque "bom" em cada item e rode npm run sample -- --judge=amostra.json`,
     );
   }

@@ -46,7 +46,7 @@ npm run enrich -- --score-only              # repontua sem tocar na rede
 npm run prune                               # remove o que as regras atuais reprovam
 npm run tidy:notes                          # reaplica a limpeza às notas gravadas
 npm run topics                              # popula os temas, sem tocar na rede
-npm run sample                              # amostra para julgar à mão
+npm run sample -- --out=amostra.json        # amostra para julgar à mão
 npm run pool:pack                           # gera data/pool.db.gz para versionar
 ```
 
@@ -493,10 +493,15 @@ do git.
 ## Calibração
 
 ```bash
-npm run sample                                   # lê uma amostra
-npm run --silent sample -- --json > amostra.json # para julgar
-npm run sample -- --judge=amostra.json           # mede o que você julgou
+npm run sample                              # lê uma amostra
+npm run sample -- --out=amostra.json        # grava a amostra para julgar
+npm run sample -- --judge=amostra.json      # mede o que você julgou
 ```
+
+Use `--out` em vez de redirecionar o stdout. O `npm run` escreve duas linhas de
+cabeçalho antes da saída do script, e com `>` elas entram no arquivo e quebram o
+JSON. (`npm run --silent` também resolve, mas é fácil esquecer o `--silent`; o
+`--judge` descarta o cabeçalho se ele aparecer.)
 
 A amostra sai **pelo mesmo caminho do app**: os pesos por fonte, os modos e o
 filtro de tema valem ali igual. Amostrar o banco direto mostraria uma
