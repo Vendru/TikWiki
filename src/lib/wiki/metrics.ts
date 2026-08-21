@@ -1,4 +1,4 @@
-import { USER_AGENT } from "../config";
+import { REQUEST_INTERVAL_MS, USER_AGENT } from "../config";
 import { DiskCache } from "./cache";
 import { WikiApiError, WikiClient } from "./client";
 import { type QueryResponse, requirePages } from "./parse";
@@ -189,6 +189,23 @@ export function countSections(wikitext: string): number {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Ritmo da API de analytics, que é outra da Action API e tem cota própria.
+ *
+ * Ela não passa pelo WikiClient, então precisa do próprio freio: sem ele a
+ * corrida dispara no ritmo da rede e derruba a cota, que foi exatamente como
+ * a Action API acabou recusando tudo por horas.
+ */
+let proximoSlotPageviews = 0;
+
+async function ritmoPageviews(): Promise<void> {
+  const intervalo = REQUEST_INTERVAL_MS;
+  const agora = Date.now();
+  const espera = Math.max(0, proximoSlotPageviews - agora);
+  proximoSlotPageviews = Math.max(agora, proximoSlotPageviews) + intervalo;
+  if (espera > 0) await sleep(espera);
+}
+
+/**
  * Média mensal de visualizações nos últimos 12 meses.
  *
  * Esta é a única chamada que não é em lote — a API de analytics é por artigo.
@@ -224,6 +241,7 @@ export async function fetchPageviews(
 
   for (let attempt = 0; attempt < 4; attempt++) {
     if (attempt > 0) await sleep(2 ** attempt * 400 + Math.random() * 200);
+    await ritmoPageviews();
 
     let res: Response;
     try {

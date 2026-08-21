@@ -35,15 +35,36 @@ describe("qualityScore", () => {
     expect(b).toBeGreaterThan(a);
   });
 
-  it("trata métrica ausente como não medida, não como zero ruim", () => {
-    const semRefs = qualityScore({ ...cheio, refs: null }, cfg);
-    const comRefsZero = qualityScore({ ...cheio, refs: 0 }, cfg);
-    // log10(1+0) = 0, então os dois batem: ausente não penaliza além de zero.
-    expect(semRefs).toBe(comRefsZero);
+  it("distingue métrica não medida de métrica medida como zero", () => {
+    // Ausente sai da conta; zero entra e puxa a média para baixo. Sem essa
+    // distinção, quem não teve backlinks medidos pontuaria como quem não tem
+    // nenhum — e a cobertura desigual é a regra, não a exceção.
+    const naoMedido = qualityScore({ ...cheio, refs: null }, cfg);
+    const medidoZero = qualityScore({ ...cheio, refs: 0 }, cfg);
+    expect(naoMedido).toBeGreaterThan(medidoZero);
+  });
+
+  it("não penaliza quem tem menos métricas medidas", () => {
+    // Um artigo no p90 das métricas que temos vale 100, tendo sido medido em
+    // seis delas ou em duas.
+    const p90 = Object.fromEntries(
+      Object.entries(cfg.quality).map(([n, t]) => [n, t.ref]),
+    ) as Metrics;
+    const { backlinks: _b, pageviews: _p, ...semBacklinks } = p90;
+    expect(qualityScore(p90, cfg)).toBeCloseTo(100, 1);
+    expect(qualityScore(semBacklinks as Metrics, cfg)).toBeCloseTo(100, 1);
+    expect(qualityScore({ langlinks: cfg.quality.langlinks.ref }, cfg)).toBeCloseTo(
+      100,
+      1,
+    );
   });
 
   it("dá zero para artigo sem métrica nenhuma", () => {
     expect(qualityScore({}, cfg)).toBe(0);
+  });
+
+  it("sem métrica nenhuma, um artigo curado fica só com o bônus", () => {
+    expect(qualityScore({}, cfg, { curated: true })).toBe(cfg.curatedBonus.value);
   });
 
   it("aplica o bônus de fonte curada", () => {
@@ -85,11 +106,18 @@ describe("qualityScore", () => {
     expect(qualityScore(p90, cfg)).toBeCloseTo(100, 1);
   });
 
-  it("cada termo contribui exatamente o próprio peso no p90", () => {
-    // Sem a normalização, o peso nominal não correspondia à influência real:
-    // sections com peso 0,8 respondia por 1% da variância do score.
+  it("cada termo vale o próprio peso quando todos estão medidos", () => {
+    // Com tudo medido, levar uma métrica de zero ao seu p90 acrescenta
+    // exatamente peso×10 pontos. É isso que faz os pesos serem comparáveis
+    // entre si: antes da normalização, sections com peso 0,8 respondia por 1%
+    // da variância do score enquanto backlinks com 2,0 respondia por 29%.
+    const zeros = Object.fromEntries(
+      Object.keys(cfg.quality).map((n) => [n, 0]),
+    ) as Metrics;
+    expect(qualityScore(zeros, cfg)).toBe(0);
+
     for (const [nome, termo] of Object.entries(cfg.quality)) {
-      const so = qualityScore({ [nome]: termo.ref } as Metrics, cfg);
+      const so = qualityScore({ ...zeros, [nome]: termo.ref }, cfg);
       expect(so).toBeCloseTo(termo.weight * 10, 1);
     }
   });
@@ -110,29 +138,40 @@ describe("surpriseScore", () => {
     const q = qualityScore(cheio, cfg);
     const obscuro = surpriseScore({ ...cheio, pageviews: 20 }, cfg, q);
     const popular = surpriseScore({ ...cheio, pageviews: 500000 }, cfg, q);
-    expect(obscuro).toBeGreaterThan(popular);
+    expect(obscuro!).toBeGreaterThan(popular!);
   });
 
-  it("sem dado de audiência, surpresa cai para qualidade", () => {
+  it("audiência abaixo do mínimo não rende surpresa nenhuma", () => {
     const q = qualityScore(cheio, cfg);
-    expect(surpriseScore({ ...cheio, pageviews: null }, cfg, q)).toBe(q);
-    expect(surpriseScore({ ...cheio, pageviews: undefined }, cfg, q)).toBe(q);
+    const minimo = cfg.surprise.pageviewsMinimo ?? 0;
+    // Contradiz as demais métricas: quase sempre é título renomeado.
+    expect(surpriseScore({ ...cheio, pageviews: minimo - 1 }, cfg, q)).toBeNull();
+    expect(surpriseScore({ ...cheio, pageviews: minimo + 50 }, cfg, q)).toBeLessThan(q);
+  });
+
+  it("sem dado de audiência, não há surpresa a afirmar", () => {
+    // Devolver a qualidade seria afirmar que é obscuro sem tê-lo medido, e o
+    // artigo terminava acima de todos os que foram medidos e penalizados.
+    const q = qualityScore(cheio, cfg);
+    expect(surpriseScore({ ...cheio, pageviews: null }, cfg, q)).toBeNull();
+    expect(surpriseScore({ ...cheio, pageviews: undefined }, cfg, q)).toBeNull();
   });
 
   it("inverte o ranking entre dois artigos de mesma qualidade", () => {
     const a = scoreArticle({ ...cheio, pageviews: 50 }, cfg);
     const b = scoreArticle({ ...cheio, pageviews: 100000 }, cfg);
     expect(a.quality).toBe(b.quality);
-    expect(a.surprise).toBeGreaterThan(b.surprise);
+    expect(a.surprise!).toBeGreaterThan(b.surprise!);
   });
 
   it("um artigo ruim e obscuro não vence um ótimo e obscuro", () => {
-    const ruim = scoreArticle({ bytes: 6000, backlinks: 1, pageviews: 5 }, cfg);
+    // Audiência acima do mínimo nos dois, senão a surpresa nem existe.
+    const ruim = scoreArticle({ bytes: 6000, backlinks: 1, pageviews: 50 }, cfg);
     const otimo = scoreArticle(
-      { bytes: 40000, langlinks: 40, backlinks: 300, refs: 60, sections: 12, pageviews: 5 },
+      { bytes: 40000, langlinks: 40, backlinks: 300, refs: 60, sections: 12, pageviews: 50 },
       cfg,
     );
-    expect(otimo.surprise).toBeGreaterThan(ruim.surprise);
+    expect(otimo.surprise!).toBeGreaterThan(ruim.surprise!);
   });
 });
 
@@ -140,7 +179,7 @@ describe("scoreArticle", () => {
   it("devolve os dois scores de uma vez", () => {
     const { quality, surprise } = scoreArticle(cheio, cfg);
     expect(quality).toBeGreaterThan(0);
-    expect(surprise).toBeLessThan(quality);
+    expect(surprise!).toBeLessThan(quality);
   });
 
   it("arredonda para duas casas, para o banco não guardar ruído", () => {

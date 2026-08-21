@@ -10,6 +10,19 @@
     }
   },
 
+  "$curated": "Quais grupos de regra valem para fonte curada. O padrão é a isenção total, como a especificação pede. A exceção é por fonte, porque as curadorias não são equivalentes: a lista de Artigos peculiares tem 4.202 itens escolhidos a dedo e o arquivo do 'Você sabia?' tem 123 mil com barra muito mais baixa.",
+  "curated": {
+    "titlePatterns": false,
+    "minBytes": false,
+    "categoryPatterns": false,
+    "content": false,
+
+    "$porFonte": "A lista peculiar fica isenta de tudo porque suas 23 entradas que as regras de título derrubariam são escolhas deliberadas: '1927 Liberian general election' é a eleição mais fraudulenta já registrada, '2005 United States Grand Prix' é a corrida em que só seis carros largaram. A regra não sabe distinguir essas de uma temporada de rotina, e a curadoria sabia. Já o DYK passa 2.443 artigos de rotina — 1.388 listas como 'List of generation III Pokémon', 945 eventos datados, 110 discografias — que chegavam ao topo do modo surpresa como delegações olímpicas obscuras. O corte de bytes segue isento também no DYK: são 15.133 artigos curtos, e artigo curto do DYK ainda é bom.",
+    "porFonte": {
+      "dyk": { "titlePatterns": true }
+    }
+  },
+
   "minProseRatio": {
     "value": 0.35,
     "$rationale": "Fração do wikitext que é prosa, fora templates, tabelas, refs e listas. Pega genericamente o artigo que é essencialmente uma ficha: táxon só com taxobox, localidade só com infobox de censo, estação ferroviária só com a caixa de linhas. Vale calibrar junto com o relatório do sweep."
@@ -21,12 +34,13 @@
     "lista": ["^Lists? of ", "^Index of ", "^Outline of ", "^Bibliography of "],
     "desambiguacao": ["\\(disambiguation\\)$", "\\(disambigua[çc][ãa]o\\)$"],
     "ano_isolado": ["^\\d{1,4}$", "^\\d{1,4} (BC|AD)$", "^\\d{4}s$"],
-    "$evento_datado": "Exige o ano E uma palavra de recorrência. Antes bastava começar com quatro dígitos ou terminar em 'of YYYY', e isso derrubava 68 artigos curados — 'Dancing plague of 1518', '2016 clown sightings', '1985 Austrian diethylene glycol wine scandal'. O alvo é a fatia anual de rotina, não o evento histórico que tem ano no nome.",
+    "$evento_datado": "Exige o ano E uma palavra de recorrência. Antes bastava começar com quatro dígitos ou terminar em 'of YYYY', e isso derrubava 68 artigos curados — 'Dancing plague of 1518', '2016 clown sightings', '1985 Austrian diethylene glycol wine scandal'. O alvo é a fatia anual de rotina, não o evento histórico que tem ano no nome. O último padrão pega a delegação nacional, que não começa com o ano e por isso escapava: 'Venezuela at the 1952 Summer Olympics' liderava o modo surpresa.",
     "evento_datado": [
       " in \\d{4}$",
       " em \\d{4}$",
       "^\\d{4}[–-]\\d{2,4} .*\\b(season|championship|cup|league|series)\\b",
-      "^\\d{4} .*\\b(election|elections|census|Grand Prix|Olympics|Olympic Games|World Cup|championship|championships|tournament|Games|season|draft)\\b"
+      "^\\d{4} .*\\b(election|elections|census|Grand Prix|Olympics|Olympic Games|World Cup|championship|championships|tournament|Games|season|draft)\\b",
+      "\\bat the \\d{4}[^,]*\\b(Olympics|Olympic Games|Paralympics|Games|World Cup|Championships|Universiade)\\b"
     ],
     "temporada_esportiva": [
       " season$",

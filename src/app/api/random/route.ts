@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomArticle } from "@/lib/db/pool";
+import { MODOS, ehModo } from "@/lib/modes";
 
 // better-sqlite3 é módulo nativo: precisa do runtime Node, não do Edge.
 export const runtime = "nodejs";
@@ -7,10 +8,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/random?exclude=1,2,3
+ * GET /api/random?exclude=1,2,3&mode=mixed&topic=historia
  *
- * `exclude` recebe os page_ids já vistos na sessão. `topic` e `mode` entram na
- * etapa 4, quando existirem scores e tópicos para ponderar.
+ * `exclude` recebe os page_ids já vistos na sessão. `mode` alterna entre
+ * qualidade, surpresa e a mistura dos dois; `topic` filtra por tema.
  */
 export function GET(request: Request) {
   const params = new URL(request.url).searchParams;
@@ -20,12 +21,25 @@ export function GET(request: Request) {
     .map((s) => Number.parseInt(s, 10))
     .filter(Number.isInteger);
 
-  const article = randomArticle({ exclude });
+  const modeParam = params.get("mode") ?? undefined;
+  if (modeParam !== undefined && !ehModo(modeParam)) {
+    return NextResponse.json(
+      { error: `mode inválido. Use ${MODOS.join(", ")}.` },
+      { status: 400 },
+    );
+  }
+
+  const topic = params.get("topic")?.trim() || undefined;
+  const article = randomArticle({ exclude, mode: modeParam, topic });
 
   if (!article) {
     return NextResponse.json(
-      { error: "Pool vazio. Rode a ingestão: npm run ingest:unusual" },
-      { status: 503 },
+      {
+        error: topic
+          ? `Nenhum artigo para o tema '${topic}' neste modo.`
+          : "Pool vazio. Rode a ingestão: npm run ingest:unusual",
+      },
+      { status: topic ? 404 : 503 },
     );
   }
 

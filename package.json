@@ -34,6 +34,15 @@
     "typecheck": "tsc --noEmit",
     "ingest:unusual": "tsx scripts/ingest-unusual.ts",
     "sweep": "tsx scripts/sweep.ts",
-    "enrich": "tsx scripts/enrich.ts"
+    "enrich": "tsx scripts/enrich.ts",
+    "ingest:dyk": "tsx scripts/ingest-dyk.ts",
+    "pool:pack": "tsx scripts/pool-pack.ts",
+    "pool:unpack": "tsx scripts/pool-unpack.ts",
+    "prebuild": "tsx scripts/pool-unpack.ts",
+    "predev": "tsx scripts/pool-unpack.ts",
+    "tidy:notes": "tsx scripts/tidy-notes.ts",
+    "prune": "tsx scripts/prune-pool.ts",
+    "sample": "tsx --conditions=react-server scripts/sample-pool.ts",
+    "topics": "tsx scripts/topics.ts"
   }
 }

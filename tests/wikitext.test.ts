@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseUnusualList, stripWikitext } from "../src/lib/wiki/wikitext";
+import { parseUnusualList, stripWikitext, tidyNote } from "../src/lib/wiki/wikitext";
 
 describe("stripWikitext", () => {
   it("resolve links com e sem rótulo", () => {
@@ -30,6 +30,76 @@ describe("stripWikitext", () => {
     expect(stripWikitext("veja [https://exemplo.org o estudo] aqui")).toBe(
       "veja o estudo aqui",
     );
+  });
+});
+
+describe("tidyNote", () => {
+  it("remove atributos de célula que precedem o conteúdo", () => {
+    expect(tidyNote(`width="70%" | Uses its testicles as a weapon.`)).toBe(
+      "Uses its testicles as a weapon.",
+    );
+    expect(tidyNote(`rowspan="2" | Two violent criminals who did not exist.`)).toBe(
+      "Two violent criminals who did not exist.",
+    );
+  });
+
+  it("remove vários atributos encadeados", () => {
+    expect(tidyNote(`align=center width="70%" | Texto real.`)).toBe("Texto real.");
+  });
+
+  it("remove referência à foto em qualquer forma", () => {
+    // A forma exata '(pictured)' já saía; estas escapavam.
+    expect(tidyNote("An American group ran campaigns (example pictured) worldwide.")).toBe(
+      "An American group ran campaigns worldwide.",
+    );
+    expect(tidyNote("O elefante (pictured in 2005) foi um presente.")).toBe(
+      "O elefante foi um presente.",
+    );
+  });
+
+  it("decodifica entidades HTML que sobrevivem ao wikitext", () => {
+    // Chegavam cruas ao card, inclusive nos melhores artigos do pool:
+    // "Death from laughter: Don't laugh&nbsp;– it's happened."
+    expect(tidyNote("Don't laugh&nbsp;&ndash; it's happened.")).toBe(
+      "Don't laugh – it's happened.",
+    );
+    expect(tidyNote("World War&nbsp;II foi travada num castelo.")).toBe(
+      "World War II foi travada num castelo.",
+    );
+    expect(tidyNote("Fish &amp; chips com 20&deg;C.")).toBe("Fish & chips com 20°C.");
+  });
+
+  it("decodifica entidades numéricas, decimais e hexadecimais", () => {
+    expect(tidyNote("Caf&#233; e ch&#xE1;.")).toBe("Café e chá.");
+  });
+
+  it("deixa intacto o que não é entidade conhecida", () => {
+    const t = "A empresa AT&T e a fórmula a &lt; b.";
+    expect(tidyNote(t)).toBe("A empresa AT&T e a fórmula a < b.");
+  });
+
+  it("não estoura com entidade numérica fora de faixa", () => {
+    expect(() => tidyNote("Lixo &#99999999999;.")).not.toThrow();
+  });
+
+  it("não confunde parêntese legítimo com legenda", () => {
+    const t = "O Peel P50 (1962-1965) é o menor carro do mundo.";
+    expect(tidyNote(t)).toBe(t);
+  });
+
+  it("não come uma barra que faz parte do texto", () => {
+    const t = "A relação entre entrada | saída é direta.";
+    expect(tidyNote(t)).toBe(t);
+  });
+
+  it("começa com maiúscula", () => {
+    expect(tidyNote(`width="70%" | uma nota em minúscula.`)).toBe(
+      "Uma nota em minúscula.",
+    );
+  });
+
+  it("devolve vazio para nota vazia, sem estourar", () => {
+    expect(tidyNote("   ")).toBe("");
   });
 });
 
@@ -103,7 +173,8 @@ describe("parseUnusualList", () => {
       `|-\n| '''[[Bir Tawil]]'''\n| primeira\n|-\n| '''[[bir tawil]]'''\n| segunda`,
     );
     expect(out).toHaveLength(1);
-    expect(out[0].note).toBe("primeira");
+    // A nota sai capitalizada por tidyNote; o que se testa aqui é qual ficou.
+    expect(out[0].note).toBe("Primeira");
   });
 
   it("descarta a âncora de seção do título", () => {

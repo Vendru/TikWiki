@@ -19,7 +19,13 @@ export interface Term {
 export interface ScoreConfig {
   quality: Record<string, Term>;
   curatedBonus: { value: number };
-  surprise: { pageviewsWeight: number; pageviewsScale: number; pageviewsRef: number };
+  surprise: {
+    pageviewsWeight: number;
+    pageviewsScale: number;
+    pageviewsRef: number;
+    /** Abaixo disto a audiência é tratada como não medida. */
+    pageviewsMinimo?: number;
+  };
 }
 
 export function loadScoreConfig(): ScoreConfig {
@@ -61,34 +67,62 @@ const normalized = (value: number, term: Term) => {
   return compress(value, term.scale) / denominator;
 };
 
+/**
+ * Qualidade na escala de 0 a 100, onde 100 é o p90 de todas as métricas.
+ *
+ * O total é dividido pelo peso das métricas de fato presentes, não pelo peso
+ * total. Sem isso, artigo com métrica faltando pontuaria sistematicamente
+ * abaixo de quem tem tudo — e como medir backlinks e audiência custa um
+ * request por artigo, essa diferença de cobertura é a regra, não a exceção.
+ *
+ * Métrica ausente e métrica zero passam a ser coisas diferentes, que é o
+ * certo: `refs: null` é "não medimos" e sai da conta; `refs: 0` é "medimos e
+ * não há nenhuma", e puxa a média para baixo.
+ */
 export function qualityScore(
   m: Metrics,
   cfg: ScoreConfig,
   opts: { curated?: boolean } = {},
 ): number {
   let total = 0;
+  let pesoDisponivel = 0;
+
   for (const [name, term] of Object.entries(cfg.quality)) {
     const raw = m[name as keyof Metrics];
     if (raw === null || raw === undefined) continue;
+    pesoDisponivel += term.weight;
     total += term.weight * normalized(raw, term);
   }
-  // Com os pesos somando 10, um artigo no p90 de tudo dá exatamente 100.
-  const score = total * 10 + (opts.curated ? cfg.curatedBonus.value : 0);
+
+  const bonus = opts.curated ? cfg.curatedBonus.value : 0;
+  if (pesoDisponivel === 0) return Math.round(bonus * 100) / 100;
+
+  const score = (total / pesoDisponivel) * 100 + bonus;
   return Math.round(score * 100) / 100;
 }
 
 /**
- * Qualidade descontada da audiência.
+ * Qualidade descontada da audiência, ou `null` quando não dá para afirmar.
  *
- * Sem dado de audiência o desconto não se aplica: não dá para afirmar que o
- * artigo é obscuro, então ele fica com a própria qualidade.
+ * Surpresa é uma afirmação sobre audiência: "isto é bom e quase ninguém lê".
+ * Sem o dado, a afirmação não se sustenta, e devolver a qualidade no lugar
+ * dela seria justamente afirmá-la — um artigo de qualidade alta e audiência
+ * desconhecida terminava no topo do ranking de surpresa, acima de todos os que
+ * de fato foram medidos e penalizados.
  */
 export function surpriseScore(
   m: Metrics,
   cfg: ScoreConfig,
   quality: number,
-): number {
-  if (m.pageviews === null || m.pageviews === undefined) return quality;
+): number | null {
+  if (m.pageviews === null || m.pageviews === undefined) return null;
+
+  // Audiência quase nula num artigo bem desenvolvido contradiz o resto das
+  // métricas, e quase sempre significa que o título foi renomeado e o
+  // histórico ficou com o nome antigo.
+  const minimo = cfg.surprise.pageviewsMinimo ?? 0;
+  if (m.pageviews < minimo) return null;
+
   const penalty =
     cfg.surprise.pageviewsWeight *
     10 *
@@ -104,7 +138,7 @@ export function scoreArticle(
   m: Metrics,
   cfg: ScoreConfig,
   opts: { curated?: boolean } = {},
-): { quality: number; surprise: number } {
+): { quality: number; surprise: number | null } {
   const quality = qualityScore(m, cfg, opts);
   return { quality, surprise: surpriseScore(m, cfg, quality) };
 }

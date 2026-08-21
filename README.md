@@ -15,26 +15,39 @@ read-only em produção.
 
 ## Estado atual
 
-Etapas 1 a 3 concluídas: pipeline da lista de Artigos peculiares, app web
-sorteando desse pool, e o filtro, o score e a varredura ampla.
+As cinco etapas concluídas: as três fontes ingeridas, o pool filtrado e
+pontuado, o sorteio ponderado com temas e modos, e o ciclo de calibração.
 
 | Métrica | Valor |
 | --- | --- |
-| Artigos no pool (`en`) | 4.330 |
-| Da lista curada / da varredura | 4.202 / 128 |
-| Com resumo | 4.330 (100%) |
-| Com nota do curador | 4.151 |
-| Com métricas e score | 4.330 (100%) |
-| Tamanho do arquivo | ~7 MB |
+| Artigos no pool (`en`) | 125.430 |
+| Do "Você sabia?" | 121.101 |
+| Da lista de Artigos peculiares | 4.202 |
+| Da varredura ampla | 127 |
+| Com score de qualidade | 125.430 (100%) |
+| Com score de surpresa | 14.948 (12%) |
+| `data/pool.db.gz` | 63,2 MB |
 
 ## Como rodar
 
 ```bash
 npm install
-npm run ingest:unusual     # popula data/pool.db
-npm run dev                # app em http://localhost:3000
-npm test                   # parsing, limpeza, sorteio e schema
+npm run dev                # app em http://localhost:3000 (extrai o pool antes)
+npm test
 npm run typecheck
+
+# pipeline, fora do request
+npm run ingest:unusual                      # lista de Artigos peculiares
+npm run ingest:dyk                          # arquivo do "Você sabia?"
+npm run sweep -- --n=800                    # varredura ampla
+npm run enrich -- --no-backlinks --no-pageviews   # métricas em lote, pool inteiro
+npm run enrich -- --band=90:99 --no-backlinks     # audiência na faixa que rende
+npm run enrich -- --score-only              # repontua sem tocar na rede
+npm run prune                               # remove o que as regras atuais reprovam
+npm run tidy:notes                          # reaplica a limpeza às notas gravadas
+npm run topics                              # popula os temas, sem tocar na rede
+npm run sample                              # amostra para julgar à mão
+npm run pool:pack                           # gera data/pool.db.gz para versionar
 ```
 
 A ingestão aceita `--refresh` (ignora o cache em disco) e `--limit=N` (processa
@@ -47,7 +60,7 @@ só os N primeiros títulos, para validar rápido).
 | `WIKI_LANG` | `en` | Idioma alvo da wiki |
 | `WIKI_CONTACT` | URL do repo | Contato no `User-Agent`, exigido pela política de acesso da Wikimedia |
 | `WIKI_INTERVAL_MS` | `200` | Intervalo mínimo entre requests |
-| `WIKI_MAX_RETRIES` | `5` | Tentativas em 429/5xx antes de desistir |
+| `WIKI_MAX_RETRIES` | `8` | Tentativas em 429/5xx antes de desistir |
 | `TIKWIKI_DB` | `data/pool.db` | Caminho do pool |
 | `TIKWIKI_CACHE` | `.cache/wiki` | Cache das respostas cruas |
 
@@ -114,8 +127,29 @@ de `list=random`:
 | 8.000 | 66,3% | 26,5% | 0,95:1 |
 
 6.000 é onde a troca marginal vira: passar para 8.000 corta só 10,2pp a mais de
-lixo custando 10,7pp a mais de artigo bom. O filtro não se aplica às fontes
-curadas, que passam direto.
+lixo custando 10,7pp a mais de artigo bom.
+
+### Isenção das fontes curadas, por fonte
+
+A especificação isenta as fontes curadas do filtro. Isso vale para a lista de
+Artigos peculiares — 4.202 itens escolhidos a dedo — mas não para o arquivo do
+"Você sabia?", que tem 121 mil e barra muito mais baixa.
+
+Medido no pool, as regras de título derrubariam **2.443 artigos do DYK**: 1.388
+listas como "List of generation III Pokémon", 924 eventos datados como "2005
+English cricket season", 110 discografias. Chegavam ao topo do modo surpresa
+como delegações olímpicas obscuras.
+
+As mesmas regras derrubariam **23 da lista peculiar**, e ali são escolhas
+deliberadas: "1927 Liberian general election" é a eleição mais fraudulenta já
+registrada, "2005 United States Grand Prix" é a corrida em que só seis carros
+largaram. A regra não distingue essas de uma temporada de rotina; a curadoria
+distinguia.
+
+Por isso a isenção é **por fonte** em `config/filters.json`: o DYK responde às
+regras de título, a lista peculiar não. O corte de bytes segue isento nas duas
+— são 15.133 artigos curtos do DYK, e artigo curto do DYK ainda é bom, que é
+justamente o que a isenção existe para proteger.
 
 ### Limpeza do resumo
 
@@ -153,17 +187,77 @@ O histórico da sessão fica em `localStorage` e acompanha o request como
 `exclude`, para não repetir. Dá para voltar ao anterior, e `←` / `→` / espaço
 navegam.
 
+O seletor de tema tem "Surpreenda-me" como padrão, e o de modo começa em
+equilibrado. Trocar qualquer um dos dois descarta o artigo já pré-buscado —
+ele veio do filtro anterior, e entregá-lo faria o seletor parecer quebrado.
+
 ### Rotas
 
 | Rota | O que faz |
 | --- | --- |
-| `GET /api/random?exclude=1,2,3` | Um artigo, fora os ids já vistos |
+| `GET /api/random?exclude=&mode=&topic=` | Um artigo, fora os ids já vistos |
+| `GET /api/topics` | Temas disponíveis, com a contagem de cada um |
 
-`topic` e `mode` entram na etapa 4, junto com o sorteio ponderado por score.
-Hoje o sorteio é uniforme: com o pool na casa dos milhares o `ORDER BY RANDOM()`
-custa um scan barato, e não vale inventar amostragem que vai ser substituída.
+`mode` inválido devolve 400; tema sem artigo devolve 404. Nenhuma rota chama a
+API da Wikipédia durante o request.
 
-Nenhuma rota chama a API da Wikipédia durante o request.
+## Sorteio
+
+O sorteio é em duas etapas, e a primeira é o maior lever de qualidade do
+produto.
+
+**Primeiro a fonte**, pelos pesos em `config/draw.json`. A lista de Artigos
+peculiares é 3,3% do pool e concentra o melhor conteúdo: sem esse passo ela
+apareceria em 3 de cada 100 sorteios. Com os pesos atuais ela fica em torno de
+50%, medido em 200 sorteios reais:
+
+| fonte | peso | medido em 250 sorteios |
+| --- | --- | --- |
+| Artigos peculiares | 60 | 57% |
+| "Você sabia?" | 39 | 42% |
+| varredura ampla | 1 | 1% |
+
+Os pesos valem nos dois caminhos, com e sem filtro de tema. Sem isso o filtro
+desfazia o ganho em silêncio: medido, a lista peculiar caía de 58% para 8%
+assim que o usuário escolhia um tema.
+
+**Depois o artigo**, tirando candidatos uniformemente por rowid e escolhendo
+entre eles com probabilidade proporcional ao peso. Com um candidato só o
+sorteio seria uniforme; com muitos, sairia sempre o mesmo topo, que é o que a
+especificação pede para evitar. 24 pondera de verdade sem travar, e custa 24
+buscas por índice em vez de varrer 125 mil linhas — o request fica em 5ms.
+
+Os modos mudam o peso: `quality` usa o score de qualidade, `surprise` o de
+surpresa, `mixed` mistura os dois. O modo surpresa só sorteia entre os 14.948
+artigos com audiência medida, porque sem o dado não há surpresa a afirmar. A
+escala de surpresa vai a -62,6, e peso negativo não existe, então ela é
+deslocada para um piso antes de virar peso.
+
+Com filtro de tema o sorteio por rowid não serve — o tema não é denso na
+tabela — então a consulta passa pelo índice de junção e sobe para ~50ms. O
+prefetch mascara isso: o usuário nunca espera.
+
+## Temas
+
+A especificação pedia os rótulos de ML da busca (`articletopic:`), mas eles não
+são consultáveis por artigo: a busca devolve artigos por tema, e cruzar isso
+com o pool exigiria varrer a wiki inteira. Buscar as categorias de cada artigo
+custaria cerca de 18.700 requests, e o filtro de tema é opcional na
+especificação.
+
+A saída veio de um dado que já estava no pool: **as subpáginas da lista de
+Artigos peculiares são uma taxonomia atribuída à mão pelos curadores**, e
+cobrem 100% dos 4.202 artigos da lista. Elas viraram os 14 temas canônicos.
+Para as demais fontes o tema é inferido do resumo, que quase sempre diz o que a
+coisa é na primeira frase.
+
+`article_topics.score` guarda a diferença: 1 para atribuição humana, 0,5 para
+inferência. Cobertura de 71% do pool; os 29% sem tema aparecem no sorteio sem
+filtro, que é o padrão.
+
+```bash
+npm run topics    # popula os temas, sem tocar na rede
+```
 
 ## Filtro, score e varredura ampla
 
@@ -342,6 +436,44 @@ para saber a idade e a procedência do pool.
 O texto dos artigos vem da Wikipédia sob CC BY-SA 4.0. O app precisa exibir a
 atribuição e o link para o artigo original, como a licença exige.
 
+## Qualidade do pool, medida
+
+Nenhuma métrica sabe o que é curioso, então a única aferição honesta é ler uma
+amostra. `npm run sample` imprime o que o card mostraria, com os scores ao
+lado, e aceita `--source`, `--mode=quality|surprise` e `--seed` para repetir a
+mesma amostra depois de uma mudança.
+
+Lendo 30 artigos sorteados uniformemente do pool, eu abriria cerca de 8. Os
+outros são válidos e secos: cantatas de Bach, políticos regionais, dubladores.
+A mesma leitura sobre 8 sorteados só da lista de Artigos peculiares deu 8 em 8
+— "o maior lago numa ilha num lago numa ilha", "a única monarquia
+constitucional marxista-leninista da história, com Elizabeth II como monarca",
+"os bungee jumpers originais são de Vanuatu".
+
+Esse contraste é o dado mais importante do pool, e é de julgamento, não de
+métrica: a lista peculiar é 3,3% do total e concentra o melhor conteúdo. Com
+sorteio uniforme ela aparece em 3 de cada 100 artigos.
+
+Não há classe sistemática a filtrar que resolva isso. Medindo pelo resumo, as
+suspeitas somam pouco: espécies e gêneros são 3,4% do pool, igrejas 0,6%,
+álbuns 0,7%, políticos 0,5% — 5,9% no total, e várias delas trazem material
+bom (*Nepenthes lowii*, a planta carnívora que serve de banheiro para
+musaranhos, é uma espécie). O conteúdo seco do "Você sabia?" não tem assinatura
+estrutural: a barra da fonte é "um fato interessante sobre um artigo novo", e
+isso produz uma faixa ampla de artigos corretos e sem graça.
+
+### Integridade
+
+| verificação | resultado |
+| --- | --- |
+| títulos ou URLs duplicados | 0 |
+| URL malformada | 0 |
+| score fora de faixa | 0 |
+| sem resumo | 6 (0,00%) |
+| sem nota | 177 (0,14%) |
+| nota com marcação ou entidade residual | 26 (0,02%) |
+| sem imagem | 48.977 (39%) |
+
 ## Decisões em aberto
 
 **A fórmula do score é uma proposta, não a especificada.** A baseline não
@@ -358,7 +490,51 @@ implementá-lo antes de investir mais na varredura.
 levar o pool a centenas de MB, e cada reingestão vira um blob novo no histórico
 do git.
 
-## Próximas etapas
+## Calibração
 
-4. Tópicos e modos de sorteio
-5. Script de calibração
+```bash
+npm run sample                                   # lê uma amostra
+npm run --silent sample -- --json > amostra.json # para julgar
+npm run sample -- --judge=amostra.json           # mede o que você julgou
+```
+
+A amostra sai **pelo mesmo caminho do app**: os pesos por fonte, os modos e o
+filtro de tema valem ali igual. Amostrar o banco direto mostraria uma
+distribuição que o usuário nunca vê, e calibrar contra ela seria calibrar a
+coisa errada.
+
+O ciclo é: gerar a amostra em JSON, marcar `"bom": true` ou `false` em cada
+item, e rodar `--judge`. Ele devolve a taxa de acerto total e por fonte, que é
+o que diz qual peso mexer.
+
+### A rodada que ajustou os pesos
+
+Quarenta artigos, um julgamento, critério "eu abriria este artigo?":
+
+| fonte | acertos | taxa | participação |
+| --- | --- | --- | --- |
+| Artigos peculiares | 21/21 | 100% | 53% |
+| "Você sabia?" | 4/18 | 22% | 45% |
+| varredura ampla | 0/1 | 0% | 3% |
+| **total** | **25/40** | **63%** | |
+
+A varredura ampla caiu para um fio de sorteio. Além dessa rodada ela já tinha a
+pior mediana de qualidade (57,1 contra 80,9 e 73,9) e o pior custo por artigo
+na ingestão — 0,42 artigo por request, contra 18,4 da lista peculiar. O "Você
+sabia?" segue com peso alto apesar da taxa menor: 22% sobre 121 mil artigos
+são cerca de 30 mil bons em números absolutos, e é o que dá variedade a um pool
+que sem ele seria só esquisitice.
+
+Uma rodada, um julgamento, quarenta artigos: serve para mover os pesos na
+direção certa, não para afirmar a taxa com precisão.
+
+## O que ficou por fazer
+
+Em ordem de valor:
+
+- **Audiência para o resto do pool.** Só 12% tem, e é o que limita o modo
+  surpresa. São 110 mil requests numa API que já recusou tudo por horas.
+- **Backlinks.** Medidos em 3,8% do pool, e a ausência custa pouco: 0,943 de
+  correlação de postos com o score completo.
+- **Temas para os 29% sem cobertura**, que exigiria as categorias de cada
+  artigo — cerca de 18.700 requests.

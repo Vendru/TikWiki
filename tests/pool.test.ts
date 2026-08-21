@@ -90,6 +90,187 @@ describe("randomArticle", () => {
   });
 });
 
+describe("randomArticle — sorteio por rowid", () => {
+  it("continua uniforme com buracos no rowid deixados por remoções", async () => {
+    // O sorteio usa rowid; remover linhas abre buracos, e um 'rowid >= ?'
+    // favoreceria quem vem logo depois de cada buraco.
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "tikwiki-gaps-"));
+    const file = path.join(dir2, "gaps.db");
+    const seed2 = openDb({ file });
+    upsertArticles(
+      seed2,
+      Array.from({ length: 60 }, (_, i) => ({
+        lang: "en",
+        pageId: i + 1,
+        title: `G${i + 1}`,
+        url: `https://en.wikipedia.org/wiki/G${i + 1}`,
+        source: "unusual",
+        curated: true,
+      })),
+    );
+    // Deixa só os pares: metade da faixa de rowid vira buraco.
+    seed2.prepare(`DELETE FROM articles WHERE page_id % 2 = 1`).run();
+    seed2.close();
+
+    process.env.TIKWIKI_DB = file;
+    vi.resetModules();
+    const { randomArticle } = await import("../src/lib/db/pool");
+
+    const contagem = new Map<number, number>();
+    for (let i = 0; i < 3000; i++) {
+      const a = randomArticle({ lang: "en" });
+      expect(a).toBeDefined();
+      contagem.set(a!.pageId, (contagem.get(a!.pageId) ?? 0) + 1);
+    }
+
+    expect(contagem.size).toBe(30);
+    // Uniforme daria 100 por artigo; a folga cobre a variação aleatória.
+    const valores = [...contagem.values()];
+    expect(Math.min(...valores)).toBeGreaterThan(45);
+    expect(Math.max(...valores)).toBeLessThan(180);
+
+    process.env.TIKWIKI_DB = dbFile;
+    vi.resetModules();
+    fs.rmSync(dir2, { recursive: true, force: true });
+  });
+});
+
+describe("randomArticle — filtro de tema", () => {
+  it("continua respeitando o peso por fonte", async () => {
+    // Regressão real: o caminho do tema ignorava a escolha de fonte, e a
+    // lista peculiar caía de 58% para 8% assim que o usuário filtrava.
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "tikwiki-tema-"));
+    const file = path.join(dir2, "tema.db");
+    const seed2 = openDb({ file });
+
+    // Fonte curada minúscula contra uma fonte grande, que é a situação real.
+    upsertArticles(seed2, [
+      ...Array.from({ length: 5 }, (_, i) => ({
+        lang: "en",
+        pageId: i + 1,
+        title: `Peculiar ${i + 1}`,
+        url: `https://en.wikipedia.org/wiki/P${i + 1}`,
+        source: "unusual",
+        curated: true,
+      })),
+      ...Array.from({ length: 500 }, (_, i) => ({
+        lang: "en",
+        pageId: 1000 + i,
+        title: `Sabia ${i}`,
+        url: `https://en.wikipedia.org/wiki/S${i}`,
+        source: "dyk",
+        curated: true,
+      })),
+    ]);
+
+    seed2.prepare(`INSERT INTO topics (id, slug, label) VALUES (1, 'tema', 'Tema')`).run();
+    const vincula = seed2.prepare(
+      `INSERT INTO article_topics (lang, page_id, topic_id, score) VALUES ('en', ?, 1, 1)`,
+    );
+    const ordena = seed2.prepare(
+      `INSERT INTO topic_index (lang, topic_id, source, ord, page_id) VALUES ('en', 1, ?, ?, ?)`,
+    );
+    for (let i = 0; i < 5; i++) {
+      vincula.run(i + 1);
+      ordena.run("unusual", i, i + 1);
+    }
+    for (let i = 0; i < 500; i++) {
+      vincula.run(1000 + i);
+      ordena.run("dyk", i, 1000 + i);
+    }
+    seed2.close();
+
+    process.env.TIKWIKI_DB = file;
+    vi.resetModules();
+    const { randomArticle } = await import("../src/lib/db/pool");
+
+    const porFonte = new Map<string, number>();
+    for (let i = 0; i < 600; i++) {
+      const a = randomArticle({ lang: "en", topic: "tema" })!;
+      porFonte.set(a.source, (porFonte.get(a.source) ?? 0) + 1);
+    }
+
+    // A fonte curada é 1% dos artigos do tema; sem a ponderação apareceria
+    // nessa proporção. Com ela, tem que passar de um terço.
+    expect(porFonte.get("unusual")! / 600).toBeGreaterThan(0.33);
+
+    process.env.TIKWIKI_DB = dbFile;
+    vi.resetModules();
+    fs.rmSync(dir2, { recursive: true, force: true });
+  });
+
+  it("devolve undefined para tema que não existe", async () => {
+    const { randomArticle } = await load();
+    expect(randomArticle({ lang: "en", topic: "inexistente" })).toBeUndefined();
+  });
+
+  it("não repete enquanto o tema ainda tem artigo não visto", async () => {
+    // Regressão real: quando a fonte sorteada esgotava dentro do tema, o
+    // sorteio caía nos candidatos já vistos e podia devolver o artigo que
+    // estava na tela. Para quem usa, o botão "outro artigo" parecia morto.
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), "tikwiki-esgota-"));
+    const file = path.join(dir2, "esgota.db");
+    const seed2 = openDb({ file });
+
+    // Uma fonte com um artigo só: ela esgota no primeiro clique, e a outra
+    // fonte precisa assumir em vez de o sorteio repetir.
+    upsertArticles(seed2, [
+      {
+        lang: "en",
+        pageId: 1,
+        title: "Único da fonte pequena",
+        url: "https://en.wikipedia.org/wiki/U1",
+        source: "unusual",
+        curated: true,
+      },
+      ...Array.from({ length: 9 }, (_, i) => ({
+        lang: "en",
+        pageId: 100 + i,
+        title: `Outro ${i}`,
+        url: `https://en.wikipedia.org/wiki/O${i}`,
+        source: "dyk",
+        curated: true,
+      })),
+    ]);
+
+    seed2.prepare(`INSERT INTO topics (id, slug, label) VALUES (1, 'tema', 'Tema')`).run();
+    const vincula = seed2.prepare(
+      `INSERT INTO article_topics (lang, page_id, topic_id, score) VALUES ('en', ?, 1, 1)`,
+    );
+    const ordena = seed2.prepare(
+      `INSERT INTO topic_index (lang, topic_id, source, ord, page_id) VALUES ('en', 1, ?, ?, ?)`,
+    );
+    vincula.run(1);
+    ordena.run("unusual", 0, 1);
+    for (let i = 0; i < 9; i++) {
+      vincula.run(100 + i);
+      ordena.run("dyk", i, 100 + i);
+    }
+    seed2.close();
+
+    process.env.TIKWIKI_DB = file;
+    vi.resetModules();
+    const { randomArticle } = await import("../src/lib/db/pool");
+
+    // Percorre o tema inteiro: as 10 têm que sair sem nenhuma repetição.
+    const vistos: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      const a = randomArticle({ lang: "en", topic: "tema", exclude: vistos });
+      expect(a).toBeDefined();
+      expect(vistos).not.toContain(a!.pageId);
+      vistos.push(a!.pageId);
+    }
+    expect(new Set(vistos).size).toBe(10);
+
+    // Exaurido de verdade, repetir é melhor que devolver nada.
+    expect(randomArticle({ lang: "en", topic: "tema", exclude: vistos })).toBeDefined();
+
+    process.env.TIKWIKI_DB = dbFile;
+    vi.resetModules();
+    fs.rmSync(dir2, { recursive: true, force: true });
+  });
+});
+
 describe("poolSize", () => {
   it("conta apenas o idioma pedido", async () => {
     const { poolSize } = await load();
