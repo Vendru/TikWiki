@@ -32,6 +32,8 @@
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "ingest:unusual": "tsx scripts/ingest-unusual.ts"
+    "ingest:unusual": "tsx scripts/ingest-unusual.ts",
+    "sweep": "tsx scripts/sweep.ts",
+    "enrich": "tsx scripts/enrich.ts"
   }
 }

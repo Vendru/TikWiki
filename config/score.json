@@ -1,0 +1,69 @@
+{
+  "$comment": "Pesos do score. A FÓRMULA É UMA PROPOSTA — a baseline não chegou na especificação, então foi escolhida aqui e precisa da sua revisão. Tudo é dado editável; scripts/enrich.ts --score-only repontua o pool inteiro sem tocar na rede.",
+
+  "$formula": "score_quality = 10 * soma(peso_i * log10(1 + x_i/escala_i) / log10(1 + ref_i/escala_i)) + bônus de curadoria. Cada termo é dividido pelo log do seu valor de referência, que é o p90 do pool medido: um artigo no p90 daquela métrica contribui exatamente `weight`. Como os pesos somam 10, um artigo no p90 de tudo dá 100.",
+
+  "$porQueNormalizar": "Sem a divisão pela referência os pesos enganam. Cada métrica tem dispersão própria depois do log — backlinks vai de 0 a 500, sections fica quase toda entre 7 e 16 — então o peso nominal não corresponde à influência real. Medido no pool antes da correção: sections com peso 0,8 respondia por 1% da variância do score e images com 0,6 respondia por 1%, enquanto backlinks com 2,0 respondia por 29% e correlacionava 0,85 com o resultado final. Na prática a fórmula era 'backlinks mais ruído'.",
+
+  "$colinearidade": "bytes, refs e sections medem em boa parte a mesma coisa: comprimento. Correlação medida no pool, nos valores em log — bytes×sections 0,83, bytes×refs 0,78, refs×sections 0,58. Os três somam 4,0 de propósito e não mais, para o comprimento não ser contado três vezes. backlinks e langlinks são os sinais mais independentes (correlação de 0,26 a 0,46 com os demais) e por isso levam o maior peso.",
+
+  "$referencias": "Os valores de ref são o p90 do pool de 4.329 artigos medidos. Se o pool mudar muito de composição, vale recalcular e repontuar com --score-only.",
+
+  "quality": {
+    "backlinks": {
+      "weight": 3.0,
+      "scale": 1,
+      "ref": 340,
+      "$why": "Quantos artigos apontam para ele. É o sinal mais forte de que o assunto é parte do tecido da enciclopédia, e não um item solto."
+    },
+    "langlinks": {
+      "weight": 2.5,
+      "scale": 1,
+      "ref": 30,
+      "$why": "Em quantos idiomas existe. Notabilidade que atravessa culturas, difícil de forjar, e o sinal menos correlacionado com os demais — carrega informação que nenhum outro termo carrega."
+    },
+    "refs": {
+      "weight": 2.0,
+      "scale": 1,
+      "ref": 79,
+      "$why": "Densidade de citação. Separa o artigo pesquisado do escrito de memória. Conta a tag de abertura, então uma fonte citada em cinco pontos conta cinco vezes — é densidade, não fontes distintas."
+    },
+    "sections": {
+      "weight": 1.0,
+      "scale": 1,
+      "ref": 16,
+      "$why": "Estrutura. Um artigo com seções foi desenvolvido, não despejado. Peso contido porque correlaciona 0,83 com bytes."
+    },
+    "bytes": {
+      "weight": 1.0,
+      "scale": 1000,
+      "ref": 45396,
+      "$why": "Tamanho em milhares de bytes. Já serve de corte no filtro; aqui entra só como gradiente."
+    },
+    "images": {
+      "weight": 0.5,
+      "scale": 1,
+      "ref": 14,
+      "$why": "O menor peso, por dois motivos. É o sinal mais fácil de inflar, e prop=images conta também os ícones de template — 'File:Commons-logo.svg' aparece na contagem de qualquer artigo com caixa do Commons."
+    }
+  },
+
+  "curatedBonus": {
+    "value": 15.0,
+    "$why": "Calibrado contra as duas distribuições reais do pool. Ao contrário do esperado, os curados já vencem a varredura ampla em todos os percentis SEM bônus, porque a lista peculiar também favorece artigo bem desenvolvido. O bônus então não serve para alcançar paridade, e sim para valer o que o score não mede: julgamento humano sobre o que é curioso.",
+    "$calibracao": "Medido na escala normalizada, com o pool repontuado: mediana crua dos curados 65,7 contra 52,9 da varredura. Com 15, a mediana curada vai a 80,7, entre o p75 (66,6) e o p90 (86,8) da varredura — um artigo curado típico bate a maior parte dela."
+  },
+
+  "surprise": {
+    "pageviewsWeight": 10.0,
+    "pageviewsScale": 1,
+    "pageviewsRef": 17205,
+    "$formula": "score_surprise = score_quality - pageviewsWeight * 10 * log10(1 + pageviews) / log10(1 + pageviewsRef). Um artigo no p90 de audiência perde exatamente pageviewsWeight * 10 pontos.",
+    "$why": "Qualidade alta com pouca audiência é onde mora a sensação de descoberta; artigo popular o usuário provavelmente já conhece.",
+    "$calibracao": "Escolhido olhando o topo do ranking a cada peso, com o pool inteiro repontuado antes de medir. Até 8, o topo ainda traz 'Human', 'American Samoa' e 'Christmas Island' — nenhum deles é descoberta. Em 10 nenhum artigo de mais de dez mil visualizações mensais sobra no topo. De 12 para cima o primeiro colocado vira 'Pakistan Muslim League – Functional': obscuridade pura, que correlaciona com tédio.",
+    "$limiteConhecido": "Mesmo no joelho, o topo é misto — 'COVID-19 pandemic in Antarctica' convive com 'FC Slutsk'. Nenhum peso conserta isso, porque audiência baixa mede desconhecimento, não curiosidade. É o mesmo limite estrutural registrado no README.",
+    "$calibrarComPoolRepontuado": "Uma primeira tentativa de calibração deu 8 porque os scores lidos do banco estavam misturados: o enrich só reescreve as linhas que remede, então as demais ainda carregavam a fórmula anterior. Rodar --score-only antes de medir é obrigatório depois de qualquer mudança nos pesos.",
+    "$pageviewsAusente": "Sem dado de audiência, surprise cai para quality: não dá para afirmar que é obscuro.",
+    "$negativos": "Artigo muito popular fica com surpresa negativa. É um score relativo e isso é esperado, mas o sorteio ponderado da etapa 4 precisa deslocar a escala antes de usar como peso."
+  }
+}

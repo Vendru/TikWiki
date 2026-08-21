@@ -1,0 +1,110 @@
+import fs from "node:fs";
+import path from "node:path";
+import { CONFIG_DIR } from "./config";
+
+/**
+ * Score de qualidade e score de surpresa.
+ *
+ * Os dois são guardados em colunas distintas para que o sorteio pondere entre
+ * eles na hora do request, em vez de fixar uma preferência na ingestão.
+ */
+
+export interface Term {
+  weight: number;
+  scale: number;
+  /** Valor de referência (p90 do pool) que faz o termo valer exatamente `weight`. */
+  ref: number;
+}
+
+export interface ScoreConfig {
+  quality: Record<string, Term>;
+  curatedBonus: { value: number };
+  surprise: { pageviewsWeight: number; pageviewsScale: number; pageviewsRef: number };
+}
+
+export function loadScoreConfig(): ScoreConfig {
+  const file = path.join(CONFIG_DIR, "score.json");
+  return JSON.parse(fs.readFileSync(file, "utf8")) as ScoreConfig;
+}
+
+/** Métricas cruas de um artigo. Ausente (null/undefined) conta como zero. */
+export interface Metrics {
+  backlinks?: number | null;
+  langlinks?: number | null;
+  refs?: number | null;
+  sections?: number | null;
+  images?: number | null;
+  bytes?: number | null;
+  pageviews?: number | null;
+}
+
+/**
+ * Comprime uma métrica de cauda longa. Um artigo com 50.000 backlinks não é
+ * cinquenta vezes melhor que um com 1.000 — sem o log ele dominaria o pool.
+ */
+const compress = (value: number, scale: number) =>
+  Math.log10(1 + Math.max(0, value) / scale);
+
+/**
+ * Normaliza o termo pelo seu valor de referência, para que o peso signifique
+ * o que aparenta significar.
+ *
+ * Sem isso os pesos enganam: como cada métrica tem uma dispersão própria
+ * depois do log, `sections` com peso 0,8 respondia por 1% da variância do
+ * score enquanto `backlinks` com peso 2,0 respondia por 29%. Dividindo pelo
+ * log da referência, um artigo no p90 daquela métrica contribui exatamente
+ * `weight`, e os pesos passam a ser comparáveis entre si.
+ */
+const normalized = (value: number, term: Term) => {
+  const denominator = compress(term.ref, term.scale);
+  if (!(denominator > 0)) return 0;
+  return compress(value, term.scale) / denominator;
+};
+
+export function qualityScore(
+  m: Metrics,
+  cfg: ScoreConfig,
+  opts: { curated?: boolean } = {},
+): number {
+  let total = 0;
+  for (const [name, term] of Object.entries(cfg.quality)) {
+    const raw = m[name as keyof Metrics];
+    if (raw === null || raw === undefined) continue;
+    total += term.weight * normalized(raw, term);
+  }
+  // Com os pesos somando 10, um artigo no p90 de tudo dá exatamente 100.
+  const score = total * 10 + (opts.curated ? cfg.curatedBonus.value : 0);
+  return Math.round(score * 100) / 100;
+}
+
+/**
+ * Qualidade descontada da audiência.
+ *
+ * Sem dado de audiência o desconto não se aplica: não dá para afirmar que o
+ * artigo é obscuro, então ele fica com a própria qualidade.
+ */
+export function surpriseScore(
+  m: Metrics,
+  cfg: ScoreConfig,
+  quality: number,
+): number {
+  if (m.pageviews === null || m.pageviews === undefined) return quality;
+  const penalty =
+    cfg.surprise.pageviewsWeight *
+    10 *
+    normalized(m.pageviews, {
+      weight: 1,
+      scale: cfg.surprise.pageviewsScale,
+      ref: cfg.surprise.pageviewsRef,
+    });
+  return Math.round((quality - penalty) * 100) / 100;
+}
+
+export function scoreArticle(
+  m: Metrics,
+  cfg: ScoreConfig,
+  opts: { curated?: boolean } = {},
+): { quality: number; surprise: number } {
+  const quality = qualityScore(m, cfg, opts);
+  return { quality, surprise: surpriseScore(m, cfg, quality) };
+}

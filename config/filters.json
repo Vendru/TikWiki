@@ -1,11 +1,120 @@
 {
-  "$comment": "Regras do filtro de exclusão, aplicadas antes do score e apenas a artigos de fontes não curadas. Calibrado empiricamente; a etapa 3 preenche o resto das regras e o relatório de quanto cada uma derruba.",
+  "$comment": "Regras do filtro de exclusão, aplicadas antes do score e só a artigos de fontes não curadas. Tudo aqui é dado editável: o script scripts/sweep.ts reporta quantos itens cada regra derrubou, para calibrar na mão. As regras estão em ordem de custo — as primeiras usam dados que já vêm da consulta básica, as últimas exigem o wikitext.",
+
   "minBytes": {
     "value": 6000,
-    "$rationale": "Comparação da distribuição de bytes entre os 4.202 artigos aprovados pela curadoria e 750 artigos do list=random. O limiar de 6000 corta 56,1% dos aleatórios perdendo 15,8% dos curados. É o ponto onde a troca marginal vira: de 6000 para 8000 corta só 10,2pp a mais de lixo custando 10,7pp a mais de bons, ou seja, deixa de compensar. Abaixo de 6000 cada passo ainda remove 1,6x a 3,3x mais lixo do que perde artigo bom.",
+    "$rationale": "Comparação da distribuição de bytes entre os 4.202 artigos aprovados pela curadoria e 750 artigos do list=random. O limiar de 6000 corta 56,1% dos aleatórios perdendo 15,8% dos curados. É o ponto onde a troca marginal vira: de 6000 para 8000 corta só 10,2pp a mais de lixo custando 10,7pp a mais de bons. Abaixo de 6000 cada passo ainda remove 1,6x a 3,3x mais lixo do que perde artigo bom.",
     "$percentis": {
       "curados": { "p5": 3617, "p25": 7709, "p50": 13580 },
       "aleatorios": { "p5": 1099, "p25": 2752, "p50": 5194 }
     }
-  }
+  },
+
+  "minProseRatio": {
+    "value": 0.35,
+    "$rationale": "Fração do wikitext que é prosa, fora templates, tabelas, refs e listas. Pega genericamente o artigo que é essencialmente uma ficha: táxon só com taxobox, localidade só com infobox de censo, estação ferroviária só com a caixa de linhas. Vale calibrar junto com o relatório do sweep."
+  },
+
+  "$titlePatterns": "Regex aplicadas ao título, sem diferenciar maiúsculas. Cada chave vira uma linha no relatório.",
+  "titlePatterns": {
+    "$lista": "Não inclui '^Timeline of' nem '^Glossary of': testados contra os 4.202 artigos curados, matavam 'Timeline of the far future' e 'Glossary of Wobbly terms', e no sweep essas duas formas quase não aparecem. O ganho não paga a perda.",
+    "lista": ["^Lists? of ", "^Index of ", "^Outline of ", "^Bibliography of "],
+    "desambiguacao": ["\\(disambiguation\\)$", "\\(disambigua[çc][ãa]o\\)$"],
+    "ano_isolado": ["^\\d{1,4}$", "^\\d{1,4} (BC|AD)$", "^\\d{4}s$"],
+    "$evento_datado": "Exige o ano E uma palavra de recorrência. Antes bastava começar com quatro dígitos ou terminar em 'of YYYY', e isso derrubava 68 artigos curados — 'Dancing plague of 1518', '2016 clown sightings', '1985 Austrian diethylene glycol wine scandal'. O alvo é a fatia anual de rotina, não o evento histórico que tem ano no nome.",
+    "evento_datado": [
+      " in \\d{4}$",
+      " em \\d{4}$",
+      "^\\d{4}[–-]\\d{2,4} .*\\b(season|championship|cup|league|series)\\b",
+      "^\\d{4} .*\\b(election|elections|census|Grand Prix|Olympics|Olympic Games|World Cup|championship|championships|tournament|Games|season|draft)\\b"
+    ],
+    "temporada_esportiva": [
+      " season$",
+      " seasons$",
+      "temporada de \\d{4}",
+      " (F[oó]rmula|Formula) (One|1) season$"
+    ],
+    "discografia_elenco": [
+      " discography$",
+      " filmography$",
+      " videography$",
+      " discografia$",
+      " cast$",
+      " cast members$"
+    ]
+  },
+
+  "$categoryPatterns": "Regex aplicadas aos nomes das categorias do artigo, sem o prefixo de namespace e sem diferenciar maiúsculas. Um único acerto derruba o artigo.",
+  "categoryPatterns": {
+    "asteroides_corpos_menores": [
+      "\\basteroids?\\b",
+      "\\bminor planets?\\b",
+      "trans-Neptunian",
+      "\\bplanetary nomenclature\\b",
+      "asteroides?"
+    ],
+    "taxons": [
+      "\\bgenera\\b",
+      "\\bspecies\\b",
+      "\\bmonotypic\\b",
+      "\\btaxa named by\\b",
+      "\\bflora of\\b",
+      "\\bfauna of\\b",
+      "\\bg[êe]neros\\b",
+      "\\besp[ée]cies\\b"
+    ],
+    "localidades": [
+      "census-designated places",
+      "\\bpopulated places\\b",
+      "\\bcities and towns in\\b",
+      "\\bmunicipalities of\\b",
+      "\\bmunicipalities in\\b",
+      "\\bfrazioni of\\b",
+      "\\blocalities of\\b",
+      "\\bvillages in\\b",
+      "\\bhamlets in\\b",
+      "\\btownships in\\b",
+      "\\bcommunes of\\b",
+      "\\bcivil parishes\\b",
+      "\\bneighbou?rhoods in\\b",
+      "\\bsuburbs of\\b",
+      "\\bdistricts of\\b",
+      "\\bmunic[íi]pios\\b",
+      "\\bbairros de\\b"
+    ],
+    "estacoes_ferroviarias": [
+      "railway stations",
+      "railroad stations",
+      "train stations",
+      "metro stations",
+      "subway stations",
+      "esta[çc][õo]es ferrovi[áa]rias"
+    ],
+    "escolas": [
+      "\\bschools in\\b",
+      "\\bhigh schools\\b",
+      "\\bsecondary schools\\b",
+      "\\bprimary schools\\b",
+      "\\bescolas\\b"
+    ],
+    "temporadas_esportivas": [
+      "\\bseasons\\b",
+      "\\bsports seasons\\b",
+      "temporadas de"
+    ],
+    "discografias_elencos": ["\\bdiscographies\\b", "\\bfilmographies\\b"]
+  },
+
+  "$stubPatterns": "Templates de esboço no wikitext. Em várias wikis o template termina em '-stub'.",
+  "stubPatterns": ["\\{\\{[^}|]*[-\\s]stub\\b", "\\{\\{esbo[çc]o\\b"],
+
+  "$fichaPatterns": "Templates que, sozinhos, indicam artigo-ficha. Só derrubam quando a prosa também está abaixo de minProseRatio.",
+  "fichaPatterns": [
+    "\\{\\{\\s*(automatic\\s+)?taxobox",
+    "\\{\\{\\s*speciesbox",
+    "\\{\\{\\s*subspeciesbox",
+    "\\{\\{\\s*infobox\\s+settlement",
+    "\\{\\{\\s*infobox\\s+station",
+    "\\{\\{\\s*infobox\\s+school"
+  ]
 }
