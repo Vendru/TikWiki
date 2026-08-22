@@ -252,12 +252,37 @@ Para as demais fontes o tema é inferido do resumo, que quase sempre diz o que a
 coisa é na primeira frase.
 
 `article_topics.score` guarda a diferença: 1 para atribuição humana, 0,5 para
-inferência. Cobertura de 71% do pool; os 29% sem tema aparecem no sorteio sem
-filtro, que é o padrão.
+inferência. Cobertura de **78,7%** do pool; os 21,3% sem tema aparecem no
+sorteio sem filtro, que é o padrão.
 
 ```bash
 npm run topics    # popula os temas, sem tocar na rede
 ```
+
+### Como os padrões foram ampliados
+
+A cobertura saiu de 71% extraindo dos 36 mil artigos sem tema o que eles
+**declaram ser** — o substantivo depois de "is a"/"was a" — e transformando os
+mais comuns em padrão: `tributary`, `railway station`, `abbey`, `museum`,
+`flying ace`, `Paralympic`, `bilateral relations`. Noventa padrões novos.
+
+Três foram descartados na conferência por casarem **menção incidental em vez do
+que o artigo é**, que é o modo típico de errar aqui:
+
+| padrão | por que saiu |
+| --- | --- |
+| `\bprofessor\b` | pegou o ator Peter Capaldi e um arqueólogo |
+| `\buniversity\b` | 8.406 artigos, entre eles uma dubladora japonesa |
+| `\bparish\b` | pegou "civil parish", que é divisão administrativa |
+
+Outros dois foram estreitados para a forma declarativa pela mesma razão:
+`\bbishop\b` casava "Æthelwine, Bishop of Durham" citado de passagem, e
+`\bneighborhood\b` casava "neighborhood branch of NYPL".
+
+Numa amostra aleatória de 18 artigos recém-rotulados, **16 estavam certos**. O
+erro típico que sobra é do mesmo tipo, com substantivo mencionado de passagem —
+aceitável para uma inferência marcada com confiança 0,5, e é por isso que a
+marca existe.
 
 ## Filtro, score e varredura ampla
 
@@ -583,11 +608,25 @@ não para afirmar a taxa com precisão.
 
 ## O que ficou por fazer
 
-Em ordem de valor:
+Em ordem de valor. As três valiam mais antes da reponderação para 70/29/1 — vale
+reler o porquê antes de gastar horas de rede em qualquer uma.
 
-- **Audiência para o resto do pool.** Só 12% tem, e é o que limita o modo
-  surpresa. São 110 mil requests numa API que já recusou tudo por horas.
+- **Temas para os 21,3% que sobraram.** É cauda longa: os 42 substantivos mais
+  comuns entre os sem tema cobriam só 5 mil dos 36 mil, e os padrões já
+  aplicados pegaram 10 mil. O resto exigiria as categorias de cada artigo, e
+  cada padrão novo precisa da mesma conferência de precisão — o modo de errar
+  aqui é casar menção de passagem.
+- **Audiência para o resto do pool** — *hoje vale menos do que parecia*. A
+  cobertura por fonte é o que importa, não a total:
+
+  | fonte | audiência medida | peso no sorteio |
+  | --- | --- | --- |
+  | Artigos peculiares | **100%** (4.202/4.202) | 70% |
+  | "Você sabia?" | 8,8% (10.620/121.101) | 29% |
+  | varredura ampla | 100% (127/127) | 1% |
+
+  A fonte que domina o sorteio já está completa. Os 110 mil que faltam são
+  todos do "Você sabia?", que responde por 29% dos sorteios e acerta 30% — seis
+  horas de rede para ampliar o modo surpresa dentro da fonte mais fraca.
 - **Backlinks.** Medidos em 3,8% do pool, e a ausência custa pouco: 0,943 de
-  correlação de postos com o score completo.
-- **Temas para os 29% sem cobertura**, que exigiria as categorias de cada
-  artigo — cerca de 18.700 requests.
+  correlação de postos com o score completo. Continua não valendo.

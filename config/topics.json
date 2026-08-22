@@ -1,92 +1,307 @@
 {
   "$comment": "Taxonomia de temas. A especificação pedia os rótulos de ML da busca (articletopic:), mas eles não são consultáveis por artigo — a busca devolve artigos por tema, e cruzar isso com o pool exigiria varrer a wiki inteira. Buscar as categorias de cada artigo custaria cerca de 18.700 requests, e o filtro de tema é opcional na especificação.",
-
   "$origem": "Os temas vêm das subpáginas da lista de Artigos peculiares, que são uma taxonomia atribuída à mão pelos curadores e cobrem 100% dos 4.202 artigos da lista. Para as demais fontes o tema é inferido do resumo, que quase sempre diz o que a coisa é na primeira frase. A inferência é aproximada e está marcada como tal em article_topics.score.",
-
   "temas": [
     {
       "slug": "cultura",
       "label": "Cultura e artes",
       "subpagina": "Popular culture, entertainment and the arts",
-      "resumo": ["\\bfilm\\b", "\\balbum\\b", "\\bnovel\\b", "\\bpainting\\b", "\\bsong\\b", "\\bband\\b", "\\bactor\\b", "\\bactress\\b", "\\bmusician\\b", "\\bsinger\\b", "\\bcomposer\\b", "\\btelevision series\\b", "\\bpoet\\b"]
+      "resumo": [
+        "\\bfilm\\b",
+        "\\balbum\\b",
+        "\\bnovel\\b",
+        "\\bpainting\\b",
+        "\\bsong\\b",
+        "\\bband\\b",
+        "\\bactor\\b",
+        "\\bactress\\b",
+        "\\bmusician\\b",
+        "\\bsinger\\b",
+        "\\bcomposer\\b",
+        "\\btelevision series\\b",
+        "\\bpoet\\b",
+        "\\bmuseum\\b",
+        "\\bis a book\\b",
+        "\\bbook by\\b",
+        "\\bepisode\\b",
+        "\\bopera\\b",
+        "\\bmotet\\b",
+        "\\bsymphon",
+        "\\bcantata\\b",
+        "\\bconcerto\\b",
+        "\\bsculpture\\b",
+        "\\bcomic\\b",
+        "\\bmagazine\\b",
+        "\\bpoem\\b",
+        "\\bplaywright\\b",
+        "\\bmemoir\\b",
+        "\\bis a play\\b"
+      ]
     },
     {
       "slug": "ciencia",
       "label": "Ciência",
       "subpagina": "Science",
-      "resumo": ["\\bspecies of\\b", "\\bgenus of\\b", "\\bfamily of\\b", "\\bphysic", "\\bchemi", "\\bbiolog", "\\bastronom", "\\bgeolog", "\\bfossil\\b", "\\bmineral\\b", "\\bexperiment"]
+      "resumo": [
+        "\\bspecies of\\b",
+        "\\bgenus of\\b",
+        "\\bfamily of\\b",
+        "\\bphysic",
+        "\\bchemi",
+        "\\bbiolog",
+        "\\bastronom",
+        "\\bgeolog",
+        "\\bfossil\\b",
+        "\\bmineral\\b",
+        "\\bexperiment",
+        "\\bepidemi",
+        "\\bvaccine\\b",
+        "\\bhormone\\b",
+        "\\benzyme\\b",
+        "\\bglacier\\b",
+        "\\bearthquake\\b",
+        "\\bvolcan"
+      ]
     },
     {
       "slug": "lugares",
       "label": "Lugares",
       "subpagina": "Places and infrastructure",
-      "resumo": ["\\bis a village\\b", "\\bis a town\\b", "\\bis a city\\b", "\\bis a municipality\\b", "\\bis a river\\b", "\\bis a mountain\\b", "\\bis an island\\b", "\\bis a lake\\b", "\\bbuilding\\b", "\\bbridge\\b", "\\bmonument\\b"]
+      "resumo": [
+        "\\bis a village\\b",
+        "\\bis a town\\b",
+        "\\bis a city\\b",
+        "\\bis a municipality\\b",
+        "\\bis a river\\b",
+        "\\bis a mountain\\b",
+        "\\bis an island\\b",
+        "\\bis a lake\\b",
+        "\\bbuilding\\b",
+        "\\bbridge\\b",
+        "\\bmonument\\b",
+        "\\btributary\\b",
+        "\\brailway station\\b",
+        "\\btrain station\\b",
+        "\\bmetro station\\b",
+        "\\blighthouse\\b",
+        "\\bnational park\\b",
+        "\\bstate park\\b",
+        "\\bunincorporated community\\b",
+        "\\bis a neighbou?rhood\\b",
+        "\\bcanal\\b",
+        "\\breservoir\\b",
+        "\\bwaterfall\\b",
+        "\\bhighway\\b",
+        "\\bis a peninsula\\b",
+        "\\bis a bay\\b",
+        "\\bis a valley\\b",
+        "\\bis a census-designated place\\b",
+        "\\bis a hamlet\\b"
+      ]
     },
     {
       "slug": "sociedade",
       "label": "Sociedade",
       "subpagina": "Society, economy and law",
-      "resumo": ["\\bpolitician\\b", "\\bgovernment\\b", "\\bparliament\\b", "\\belection\\b", "\\blaw\\b", "\\bcourt\\b", "\\beconom", "\\bcompany\\b", "\\bnewspaper\\b"]
+      "resumo": [
+        "\\bpolitician\\b",
+        "\\bgovernment\\b",
+        "\\bparliament\\b",
+        "\\belection\\b",
+        "\\blaw\\b",
+        "\\bcourt\\b",
+        "\\beconom",
+        "\\bcompany\\b",
+        "\\bnewspaper\\b",
+        "\\bbilateral relations\\b",
+        "\\bdiplomatic relations\\b",
+        "\\btrade union\\b",
+        "\\bcharity\\b",
+        "\\bnon-?profit\\b",
+        "\\bactivist\\b",
+        "\\bis a school\\b",
+        "\\bambassador\\b",
+        "\\bmayor\\b",
+        "\\bjournalist\\b"
+      ]
     },
     {
       "slug": "esportes",
       "label": "Esportes",
       "subpagina": "Sports",
-      "resumo": ["\\bfootball", "\\bcricket\\b", "\\bOlympic", "\\bchampionship\\b", "\\bathlete\\b", "\\bbaseball\\b", "\\bbasketball\\b", "\\brugby\\b", "\\bboxer\\b"]
+      "resumo": [
+        "\\bfootball",
+        "\\bcricket\\b",
+        "\\bOlympic",
+        "\\bchampionship\\b",
+        "\\bathlete\\b",
+        "\\bbaseball\\b",
+        "\\bbasketball\\b",
+        "\\brugby\\b",
+        "\\bboxer\\b",
+        "\\bsnowboard",
+        "\\bskier\\b",
+        "\\bswimmer\\b",
+        "\\bcyclist\\b",
+        "\\btennis\\b",
+        "\\bwrestl",
+        "\\bgolfer\\b",
+        "\\bParalympic",
+        "\\bhockey\\b",
+        "\\bsprinter\\b",
+        "\\brower\\b",
+        "\\bfencer\\b"
+      ]
     },
     {
       "slug": "tecnologia",
       "label": "Tecnologia",
       "subpagina": "Technology, inventions and products",
-      "resumo": ["\\bsoftware\\b", "\\bcomputer\\b", "\\bengine\\b", "\\baircraft\\b", "\\bvehicle\\b", "\\blocomotive\\b", "\\bmachine\\b", "\\bpatent\\b", "\\bspacecraft\\b"]
+      "resumo": [
+        "\\bsoftware\\b",
+        "\\bcomputer\\b",
+        "\\bengine\\b",
+        "\\baircraft\\b",
+        "\\bvehicle\\b",
+        "\\blocomotive\\b",
+        "\\bmachine\\b",
+        "\\bpatent\\b",
+        "\\bspacecraft\\b",
+        "\\bstreaming\\b",
+        "\\bsatellite\\b",
+        "\\btelescope\\b",
+        "\\balgorithm\\b",
+        "\\bprotocol\\b",
+        "\\bsemiconductor\\b"
+      ]
     },
     {
       "slug": "lingua",
       "label": "Língua",
       "subpagina": "Language",
-      "resumo": ["\\blanguage\\b", "\\bdialect\\b", "\\balphabet\\b", "\\bword\\b", "\\betymolog", "\\blinguist"]
+      "resumo": [
+        "\\blanguage\\b",
+        "\\bdialect\\b",
+        "\\balphabet\\b",
+        "\\bword\\b",
+        "\\betymolog",
+        "\\blinguist"
+      ]
     },
     {
       "slug": "militar",
       "label": "Militar",
       "subpagina": "Military",
-      "resumo": ["\\bregiment\\b", "\\bbattalion\\b", "\\bwarship\\b", "\\bsubmarine\\b", "\\bmilitary\\b", "\\bsoldier\\b", "\\bnavy\\b"]
+      "resumo": [
+        "\\bregiment\\b",
+        "\\bbattalion\\b",
+        "\\bwarship\\b",
+        "\\bsubmarine\\b",
+        "\\bmilitary\\b",
+        "\\bsoldier\\b",
+        "\\bnavy\\b",
+        "\\bflying ace\\b",
+        "\\bair force\\b",
+        "\\bcolonel\\b",
+        "\\bbrigade\\b",
+        "\\bsquadron\\b",
+        "\\bfortress\\b",
+        "\\bartiller",
+        "\\bcavalry\\b",
+        "\\bveteran of\\b",
+        "\\bwar hero\\b"
+      ]
     },
     {
       "slug": "historia",
       "label": "História",
       "subpagina": "History",
-      "resumo": ["\\bbattle of\\b", "\\bempire\\b", "\\bdynasty\\b", "\\bmedieval\\b", "\\barchaeolog", "\\bancient\\b", "\\b\\d{1,2}th century\\b"]
+      "resumo": [
+        "\\bbattle of\\b",
+        "\\bempire\\b",
+        "\\bdynasty\\b",
+        "\\bmedieval\\b",
+        "\\barchaeolog",
+        "\\bancient\\b",
+        "\\b\\d{1,2}th century\\b"
+      ]
     },
     {
       "slug": "comida",
       "label": "Comida",
       "subpagina": "Food",
-      "resumo": ["\\bcuisine\\b", "\\bdish\\b", "\\brecipe\\b", "\\bcheese\\b", "\\bbeverage\\b", "\\brestaurant\\b", "\\bbrewery\\b"]
+      "resumo": [
+        "\\bcuisine\\b",
+        "\\bdish\\b",
+        "\\brecipe\\b",
+        "\\bcheese\\b",
+        "\\bbeverage\\b",
+        "\\brestaurant\\b",
+        "\\bbrewery\\b"
+      ]
     },
     {
       "slug": "religiao",
       "label": "Religião",
       "subpagina": "Religion and spirituality",
-      "resumo": ["\\bchurch\\b", "\\btemple\\b", "\\bmosque\\b", "\\bsynagogue\\b", "\\bsaint\\b", "\\bmonaster", "\\btheolog", "\\bdeity\\b"]
+      "resumo": [
+        "\\bchurch\\b",
+        "\\btemple\\b",
+        "\\bmosque\\b",
+        "\\bsynagogue\\b",
+        "\\bsaint\\b",
+        "\\bmonaster",
+        "\\btheolog",
+        "\\bdeity\\b",
+        "\\babbey\\b",
+        "\\bcathedral\\b",
+        "\\bbasilica\\b",
+        "\\bchapel\\b",
+        "\\bconvent\\b",
+        "\\bshrine\\b",
+        "\\b(?:is|was) an? (?:\\w+ )?bishop\\b",
+        "\\bPope\\b",
+        "\\bfriar\\b",
+        "\\bBenedictine\\b",
+        "\\bJesuit\\b"
+      ]
     },
     {
       "slug": "matematica",
       "label": "Matemática",
       "subpagina": "Mathematics and numbers",
-      "resumo": ["\\bmathemat", "\\btheorem\\b", "\\bequation\\b", "\\bnumber theory\\b", "\\bgeometr", "\\balgebra"]
+      "resumo": [
+        "\\bmathemat",
+        "\\btheorem\\b",
+        "\\bequation\\b",
+        "\\bnumber theory\\b",
+        "\\bgeometr",
+        "\\balgebra"
+      ]
     },
     {
       "slug": "folclore",
       "label": "Folclore",
       "subpagina": "Folklore",
-      "resumo": ["\\bfolklore\\b", "\\blegend\\b", "\\bmyth", "\\bsuperstition\\b", "\\bcryptid\\b"]
+      "resumo": [
+        "\\bfolklore\\b",
+        "\\blegend\\b",
+        "\\bmyth",
+        "\\bsuperstition\\b",
+        "\\bcryptid\\b"
+      ]
     },
     {
       "slug": "morte",
       "label": "Morte",
       "subpagina": "Death",
-      "resumo": ["\\bfuneral\\b", "\\bcemeter", "\\bburial\\b", "\\bmummy\\b", "\\bexecution\\b"]
+      "resumo": [
+        "\\bfuneral\\b",
+        "\\bcemeter",
+        "\\bburial\\b",
+        "\\bmummy\\b",
+        "\\bexecution\\b"
+      ]
     }
   ]
 }
