@@ -3,9 +3,11 @@
 
   "$porFonte": "O maior lever de qualidade do produto, e o mais barato. A lista de Artigos peculiares é 3,3% do pool e concentra o melhor conteúdo: no sorteio uniforme ela apareceria em 3 de cada 100. Não há custo em favorecê-la — com 4.202 artigos a 60% do sorteio, quem vir 50 artigos por sessão precisa de 140 sessões para esgotá-la.",
 
-  "$calibracao": "Uma rodada de julgamento à mão sobre 40 artigos sorteados pelo caminho real do app (npm run sample) deu 63% de acerto no total, com 100% (21/21) da lista peculiar, 22% (4/18) do 'Você sabia?' e 0% (0/1) da varredura ampla. Daí este ajuste: a varredura cai para um fio, porque além dessa rodada ela já tinha a pior mediana de qualidade (57,1 contra 80,9 e 73,9) e o pior custo por artigo na ingestão. O 'Você sabia?' segue com peso alto apesar da taxa menor: são cerca de 30 mil artigos bons em números absolutos, e é o que dá variedade a um pool que sem ele seria só esquisitice.",
+  "$calibracao": "Duas rodadas de julgamento à mão, sorteadas pelo caminho real do app (npm run sample), 70 artigos no total. Agrupadas: 100% (39/39) da lista peculiar, 30% (9/30) do 'Você sabia?', 0% (0/1) da varredura ampla. A varredura ficou num fio porque além disso tinha a pior mediana de qualidade (57,1 contra 80,9 e 73,9) e o pior custo por artigo na ingestão. O 'Você sabia?' segue com peso alto apesar da taxa menor: são cerca de 30 mil artigos bons em números absolutos, e é o que dá variedade a um pool que sem ele seria só esquisitice.",
 
-  "$evidencia": "Uma rodada, um julgamento, 40 artigos. Serve para mover os pesos na direção certa, não para afirmar a taxa com precisão. Refaça com npm run sample -- --json e --judge depois de qualquer mudança.",
+  "$evidencia": "Primeira rodada: 40 artigos aos pesos 50/45/5, 63% no total. Segunda: 30 artigos aos pesos atuais, 77%. Os julgamentos não divergem — os IC 95% do 'Você sabia?' são [9%,45%] e [19%,68%] e se sobrepõem; a melhora veio dos pesos, e o modelo confirma (previa 64% e 72%, observou 63% e 77%). Refaça com npm run sample -- --out=amostra.json e --judge depois de qualquer mudança.",
+
+  "$proximoAjuste": "Não subir mais o peso da lista peculiar antes de tentar o filtro. 70/29/1 daria 79% previsto, mas custa variedade e esgota mais rápido uma lista de 4.202 artigos. Levar o 'Você sabia?' de 30% para 50% por regra de exclusão dá os mesmos 79% sem mexer em peso nenhum, e vale para o pool inteiro em vez de só para o sorteio.",
 
   "porFonte": {
     "unusual": 60,

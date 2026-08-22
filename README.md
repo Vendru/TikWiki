@@ -512,26 +512,40 @@ O ciclo é: gerar a amostra em JSON, marcar `"bom": true` ou `false` em cada
 item, e rodar `--judge`. Ele devolve a taxa de acerto total e por fonte, que é
 o que diz qual peso mexer.
 
-### A rodada que ajustou os pesos
+### As duas rodadas
 
-Quarenta artigos, um julgamento, critério "eu abriria este artigo?":
+Critério em ambas: "eu abriria este artigo?".
 
-| fonte | acertos | taxa | participação |
-| --- | --- | --- | --- |
-| Artigos peculiares | 21/21 | 100% | 53% |
-| "Você sabia?" | 4/18 | 22% | 45% |
-| varredura ampla | 0/1 | 0% | 3% |
-| **total** | **25/40** | **63%** | |
+| rodada | pesos no sorteio | total | Artigos peculiares | "Você sabia?" | varredura |
+| --- | --- | --- | --- | --- | --- |
+| primeira, 40 artigos | 50/45/5 | 25/40 = 63% | 21/21 = 100% | 4/18 = 22% | 0/1 = 0% |
+| segunda, 30 artigos | 60/39/1 | 23/30 = 77% | 18/18 = 100% | 5/12 = 42% | — |
+| **juntas** | | **48/70 = 69%** | **39/39 = 100%** | **9/30 = 30%** | **0/1 = 0%** |
 
-A varredura ampla caiu para um fio de sorteio. Além dessa rodada ela já tinha a
-pior mediana de qualidade (57,1 contra 80,9 e 73,9) e o pior custo por artigo
-na ingestão — 0,42 artigo por request, contra 18,4 da lista peculiar. O "Você
-sabia?" segue com peso alto apesar da taxa menor: 22% sobre 121 mil artigos
-são cerca de 30 mil bons em números absolutos, e é o que dá variedade a um pool
-que sem ele seria só esquisitice.
+As taxas por fonte são condicionais à fonte, então somam entre rodadas mesmo
+tendo saído de pesos diferentes.
 
-Uma rodada, um julgamento, quarenta artigos: serve para mover os pesos na
-direção certa, não para afirmar a taxa com precisão.
+**Os dois julgamentos não divergem.** Parece que sim — 22% contra 42% no "Você
+sabia?" — mas os intervalos de confiança de 95% são [9%, 45%] e [19%, 68%]:
+sobrepõem-se quase por inteiro. Com 12 e 18 casos não há como distinguir.
+
+**A melhora de 63% para 77% é dos pesos, não do juiz.** Aplicando as taxas por
+fonte agrupadas aos pesos de cada rodada, o modelo prevê 64% para a primeira
+(observado 63%) e 72% para a segunda (observado 77%). A reponderação fez o que
+prometia.
+
+O que sobra é o gargalo real: a lista peculiar acerta 100% em 39 artigos e dois
+juízes independentes, e o "Você sabia?" acerta 30%. Como cerca de 4 em cada 10
+sorteios vêm dele, ele responde sozinho por quase todos os erros.
+
+Subir mais o peso da lista peculiar é a saída fácil e funciona — 70/29/1 daria
+79% previsto — mas custa variedade e esgota mais rápido uma lista de 4.202
+artigos. Melhorar a taxa do "Você sabia?" por filtro vale mais: levá-lo de 30%
+para 50% dá 79% sem tirar peso de lugar nenhum, e vale para o pool inteiro em
+vez de só para o sorteio.
+
+Setenta artigos, dois julgamentos: serve para mover os pesos na direção certa,
+não para afirmar a taxa com precisão.
 
 ## O que ficou por fazer
 
