@@ -538,11 +538,45 @@ O que sobra é o gargalo real: a lista peculiar acerta 100% em 39 artigos e dois
 juízes independentes, e o "Você sabia?" acerta 30%. Como cerca de 4 em cada 10
 sorteios vêm dele, ele responde sozinho por quase todos os erros.
 
-Subir mais o peso da lista peculiar é a saída fácil e funciona — 70/29/1 daria
-79% previsto — mas custa variedade e esgota mais rápido uma lista de 4.202
-artigos. Melhorar a taxa do "Você sabia?" por filtro vale mais: levá-lo de 30%
-para 50% dá 79% sem tirar peso de lugar nenhum, e vale para o pool inteiro em
-vez de só para o sorteio.
+### Por que não deu para resolver com filtro
+
+A saída melhor seria subir a taxa do "Você sabia?" por regra de exclusão: valeria
+para o pool inteiro e não custaria variedade. Foi tentada primeiro, com os sete
+reprovados da segunda rodada, e não existe.
+
+**Piso de score não serve — funcionaria ao contrário.** Os reprovados têm
+mediana de qualidade **78,7 contra 71,1 da fonte**, e três estão no quartil de
+cima:
+
+| reprovado | score | percentil na fonte |
+| --- | --- | --- |
+| Agriculture in Wales | 91,5 | p85 |
+| Fort Srebrna Góra | 86,9 | p80 |
+| Andreyan Zakharov | 82,7 | p74 |
+| Fleetwood, Oregon | 78,7 | p66 |
+| The Lost Homestead | 65,2 | p35 |
+| Co-operative Commission | 63,2 | p30 |
+| Prince Edward Point Bird Observatory | 62,5 | p29 |
+
+Um piso preservaria justamente os chatos. O score mede desenvolvimento
+enciclopédico, e um assunto sem graça pode ser muito bem desenvolvido.
+
+**Filtro por forma de título também não serve.** As duas formas óbvias tiradas
+dos reprovados levam junto o melhor da lista peculiar:
+
+| regra | derruba no pool | derruba da lista peculiar | vítimas |
+| --- | --- | --- | --- |
+| lugar, `X, Região` | 4.170 | 79 | Santa Claus, Arizona · Toadsuck, Texas · Aoshima, Ehime |
+| panorama, `X in Y` | 2.735 | 100 | Crime in Antarctica |
+
+Os sete reprovados **não são lixo**: são artigos legítimos, bem escritos, sobre
+assuntos comuns. Nenhum sinal estrutural separa "correto e sem graça" de
+"correto e fascinante" — que é a mesma conclusão da seção anterior, agora
+confirmada numa amostra independente.
+
+Sem filtro possível, sobra a reponderação, e foi ela: **70/29/1**, verificada em
+600 sorteios (68,3% / 30,5% / 1,2%). Prevê 79% contra os 72% de 60/39/1. Custa
+esgotar a lista peculiar em 120 sessões de 50 em vez de 140.
 
 Setenta artigos, dois julgamentos: serve para mover os pesos na direção certa,
 não para afirmar a taxa com precisão.
