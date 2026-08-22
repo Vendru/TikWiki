@@ -3,13 +3,17 @@
 
   "$porFonte": "O maior lever de qualidade do produto, e o mais barato. A lista de Artigos peculiares é 3,3% do pool e concentra o melhor conteúdo: no sorteio uniforme ela apareceria em 3 de cada 100. Não há custo em favorecê-la — com 4.202 artigos a 60% do sorteio, quem vir 50 artigos por sessão precisa de 140 sessões para esgotá-la.",
 
-  "$calibracao": "Uma rodada de julgamento à mão sobre 40 artigos sorteados pelo caminho real do app (npm run sample) deu 63% de acerto no total, com 100% (21/21) da lista peculiar, 22% (4/18) do 'Você sabia?' e 0% (0/1) da varredura ampla. Daí este ajuste: a varredura cai para um fio, porque além dessa rodada ela já tinha a pior mediana de qualidade (57,1 contra 80,9 e 73,9) e o pior custo por artigo na ingestão. O 'Você sabia?' segue com peso alto apesar da taxa menor: são cerca de 30 mil artigos bons em números absolutos, e é o que dá variedade a um pool que sem ele seria só esquisitice.",
+  "$calibracao": "Duas rodadas de julgamento à mão, sorteadas pelo caminho real do app (npm run sample), 70 artigos no total. Agrupadas: 100% (39/39) da lista peculiar, 30% (9/30) do 'Você sabia?', 0% (0/1) da varredura ampla. A varredura ficou num fio porque além disso tinha a pior mediana de qualidade (57,1 contra 80,9 e 73,9) e o pior custo por artigo na ingestão. O 'Você sabia?' segue com peso alto apesar da taxa menor: são cerca de 30 mil artigos bons em números absolutos, e é o que dá variedade a um pool que sem ele seria só esquisitice.",
 
-  "$evidencia": "Uma rodada, um julgamento, 40 artigos. Serve para mover os pesos na direção certa, não para afirmar a taxa com precisão. Refaça com npm run sample -- --json e --judge depois de qualquer mudança.",
+  "$evidencia": "Primeira rodada: 40 artigos aos pesos 50/45/5, 63% no total. Segunda: 30 artigos aos pesos atuais, 77%. Os julgamentos não divergem — os IC 95% do 'Você sabia?' são [9%,45%] e [19%,68%] e se sobrepõem; a melhora veio dos pesos, e o modelo confirma (previa 64% e 72%, observou 63% e 77%). Refaça com npm run sample -- --out=amostra.json e --judge depois de qualquer mudança.",
+
+  "$porQue70": "O filtro foi tentado primeiro porque seria a solução melhor — valeria para o pool inteiro e não custaria variedade. Como não existe regra que separe esses reprovados sem levar junto o melhor da lista peculiar, sobra a reponderação: 70/29/1 prevê 79% contra os 72% de 60/39/1. O custo é esgotar a lista peculiar em 120 sessões de 50 artigos em vez de 140, o que continua longe de ser um limite real. A varredura ampla fica no fio de 1: um artigo a cada cem é barato, e é o único canal capaz de trazer o que as duas listas curadas não conhecem.",
+
+  "$semFiltroPossivel": "A tentativa de subir o 'Você sabia?' por filtro falhou, e falhou de um jeito que vale registrar. Os sete reprovados da segunda rodada têm mediana de qualidade 78,7 contra 71,1 da fonte, três deles no quartil de cima — um piso de score preservaria justamente os chatos, porque o score mede desenvolvimento enciclopédico e um assunto sem graça pode ser muito bem desenvolvido ('Agriculture in Wales' está no p85). Filtro por forma de título também não serve: a regra de lugar ('X, Região') derrubaria 79 artigos da lista peculiar, entre eles 'Santa Claus, Arizona', 'Toadsuck, Texas' e 'Aoshima, Ehime'; a de panorama ('X in Y') derrubaria 100, entre eles 'Crime in Antarctica'. Os reprovados não são lixo: são artigos legítimos e bem-feitos sobre assuntos comuns, e nenhum sinal estrutural separa 'correto e sem graça' de 'correto e fascinante'.",
 
   "porFonte": {
-    "unusual": 60,
-    "dyk": 39,
+    "unusual": 70,
+    "dyk": 29,
     "random": 1
   },
 

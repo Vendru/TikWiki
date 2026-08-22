@@ -46,7 +46,7 @@ npm run enrich -- --score-only              # repontua sem tocar na rede
 npm run prune                               # remove o que as regras atuais reprovam
 npm run tidy:notes                          # reaplica a limpeza às notas gravadas
 npm run topics                              # popula os temas, sem tocar na rede
-npm run sample                              # amostra para julgar à mão
+npm run sample -- --out=amostra.json        # amostra para julgar à mão
 npm run pool:pack                           # gera data/pool.db.gz para versionar
 ```
 
@@ -252,12 +252,37 @@ Para as demais fontes o tema é inferido do resumo, que quase sempre diz o que a
 coisa é na primeira frase.
 
 `article_topics.score` guarda a diferença: 1 para atribuição humana, 0,5 para
-inferência. Cobertura de 71% do pool; os 29% sem tema aparecem no sorteio sem
-filtro, que é o padrão.
+inferência. Cobertura de **78,7%** do pool; os 21,3% sem tema aparecem no
+sorteio sem filtro, que é o padrão.
 
 ```bash
 npm run topics    # popula os temas, sem tocar na rede
 ```
+
+### Como os padrões foram ampliados
+
+A cobertura saiu de 71% extraindo dos 36 mil artigos sem tema o que eles
+**declaram ser** — o substantivo depois de "is a"/"was a" — e transformando os
+mais comuns em padrão: `tributary`, `railway station`, `abbey`, `museum`,
+`flying ace`, `Paralympic`, `bilateral relations`. Noventa padrões novos.
+
+Três foram descartados na conferência por casarem **menção incidental em vez do
+que o artigo é**, que é o modo típico de errar aqui:
+
+| padrão | por que saiu |
+| --- | --- |
+| `\bprofessor\b` | pegou o ator Peter Capaldi e um arqueólogo |
+| `\buniversity\b` | 8.406 artigos, entre eles uma dubladora japonesa |
+| `\bparish\b` | pegou "civil parish", que é divisão administrativa |
+
+Outros dois foram estreitados para a forma declarativa pela mesma razão:
+`\bbishop\b` casava "Æthelwine, Bishop of Durham" citado de passagem, e
+`\bneighborhood\b` casava "neighborhood branch of NYPL".
+
+Numa amostra aleatória de 18 artigos recém-rotulados, **16 estavam certos**. O
+erro típico que sobra é do mesmo tipo, com substantivo mencionado de passagem —
+aceitável para uma inferência marcada com confiança 0,5, e é por isso que a
+marca existe.
 
 ## Filtro, score e varredura ampla
 
@@ -493,10 +518,15 @@ do git.
 ## Calibração
 
 ```bash
-npm run sample                                   # lê uma amostra
-npm run --silent sample -- --json > amostra.json # para julgar
-npm run sample -- --judge=amostra.json           # mede o que você julgou
+npm run sample                              # lê uma amostra
+npm run sample -- --out=amostra.json        # grava a amostra para julgar
+npm run sample -- --judge=amostra.json      # mede o que você julgou
 ```
+
+Use `--out` em vez de redirecionar o stdout. O `npm run` escreve duas linhas de
+cabeçalho antes da saída do script, e com `>` elas entram no arquivo e quebram o
+JSON. (`npm run --silent` também resolve, mas é fácil esquecer o `--silent`; o
+`--judge` descarta o cabeçalho se ele aparecer.)
 
 A amostra sai **pelo mesmo caminho do app**: os pesos por fonte, os modos e o
 filtro de tema valem ali igual. Amostrar o banco direto mostraria uma
@@ -507,34 +537,96 @@ O ciclo é: gerar a amostra em JSON, marcar `"bom": true` ou `false` em cada
 item, e rodar `--judge`. Ele devolve a taxa de acerto total e por fonte, que é
 o que diz qual peso mexer.
 
-### A rodada que ajustou os pesos
+### As duas rodadas
 
-Quarenta artigos, um julgamento, critério "eu abriria este artigo?":
+Critério em ambas: "eu abriria este artigo?".
 
-| fonte | acertos | taxa | participação |
+| rodada | pesos no sorteio | total | Artigos peculiares | "Você sabia?" | varredura |
+| --- | --- | --- | --- | --- | --- |
+| primeira, 40 artigos | 50/45/5 | 25/40 = 63% | 21/21 = 100% | 4/18 = 22% | 0/1 = 0% |
+| segunda, 30 artigos | 60/39/1 | 23/30 = 77% | 18/18 = 100% | 5/12 = 42% | — |
+| **juntas** | | **48/70 = 69%** | **39/39 = 100%** | **9/30 = 30%** | **0/1 = 0%** |
+
+As taxas por fonte são condicionais à fonte, então somam entre rodadas mesmo
+tendo saído de pesos diferentes.
+
+**Os dois julgamentos não divergem.** Parece que sim — 22% contra 42% no "Você
+sabia?" — mas os intervalos de confiança de 95% são [9%, 45%] e [19%, 68%]:
+sobrepõem-se quase por inteiro. Com 12 e 18 casos não há como distinguir.
+
+**A melhora de 63% para 77% é dos pesos, não do juiz.** Aplicando as taxas por
+fonte agrupadas aos pesos de cada rodada, o modelo prevê 64% para a primeira
+(observado 63%) e 72% para a segunda (observado 77%). A reponderação fez o que
+prometia.
+
+O que sobra é o gargalo real: a lista peculiar acerta 100% em 39 artigos e dois
+juízes independentes, e o "Você sabia?" acerta 30%. Como cerca de 4 em cada 10
+sorteios vêm dele, ele responde sozinho por quase todos os erros.
+
+### Por que não deu para resolver com filtro
+
+A saída melhor seria subir a taxa do "Você sabia?" por regra de exclusão: valeria
+para o pool inteiro e não custaria variedade. Foi tentada primeiro, com os sete
+reprovados da segunda rodada, e não existe.
+
+**Piso de score não serve — funcionaria ao contrário.** Os reprovados têm
+mediana de qualidade **78,7 contra 71,1 da fonte**, e três estão no quartil de
+cima:
+
+| reprovado | score | percentil na fonte |
+| --- | --- | --- |
+| Agriculture in Wales | 91,5 | p85 |
+| Fort Srebrna Góra | 86,9 | p80 |
+| Andreyan Zakharov | 82,7 | p74 |
+| Fleetwood, Oregon | 78,7 | p66 |
+| The Lost Homestead | 65,2 | p35 |
+| Co-operative Commission | 63,2 | p30 |
+| Prince Edward Point Bird Observatory | 62,5 | p29 |
+
+Um piso preservaria justamente os chatos. O score mede desenvolvimento
+enciclopédico, e um assunto sem graça pode ser muito bem desenvolvido.
+
+**Filtro por forma de título também não serve.** As duas formas óbvias tiradas
+dos reprovados levam junto o melhor da lista peculiar:
+
+| regra | derruba no pool | derruba da lista peculiar | vítimas |
 | --- | --- | --- | --- |
-| Artigos peculiares | 21/21 | 100% | 53% |
-| "Você sabia?" | 4/18 | 22% | 45% |
-| varredura ampla | 0/1 | 0% | 3% |
-| **total** | **25/40** | **63%** | |
+| lugar, `X, Região` | 4.170 | 79 | Santa Claus, Arizona · Toadsuck, Texas · Aoshima, Ehime |
+| panorama, `X in Y` | 2.735 | 100 | Crime in Antarctica |
 
-A varredura ampla caiu para um fio de sorteio. Além dessa rodada ela já tinha a
-pior mediana de qualidade (57,1 contra 80,9 e 73,9) e o pior custo por artigo
-na ingestão — 0,42 artigo por request, contra 18,4 da lista peculiar. O "Você
-sabia?" segue com peso alto apesar da taxa menor: 22% sobre 121 mil artigos
-são cerca de 30 mil bons em números absolutos, e é o que dá variedade a um pool
-que sem ele seria só esquisitice.
+Os sete reprovados **não são lixo**: são artigos legítimos, bem escritos, sobre
+assuntos comuns. Nenhum sinal estrutural separa "correto e sem graça" de
+"correto e fascinante" — que é a mesma conclusão da seção anterior, agora
+confirmada numa amostra independente.
 
-Uma rodada, um julgamento, quarenta artigos: serve para mover os pesos na
-direção certa, não para afirmar a taxa com precisão.
+Sem filtro possível, sobra a reponderação, e foi ela: **70/29/1**, verificada em
+600 sorteios (68,3% / 30,5% / 1,2%). Prevê 79% contra os 72% de 60/39/1. Custa
+esgotar a lista peculiar em 120 sessões de 50 em vez de 140.
+
+Setenta artigos, dois julgamentos: serve para mover os pesos na direção certa,
+não para afirmar a taxa com precisão.
 
 ## O que ficou por fazer
 
-Em ordem de valor:
+Em ordem de valor. As três valiam mais antes da reponderação para 70/29/1 — vale
+reler o porquê antes de gastar horas de rede em qualquer uma.
 
-- **Audiência para o resto do pool.** Só 12% tem, e é o que limita o modo
-  surpresa. São 110 mil requests numa API que já recusou tudo por horas.
+- **Temas para os 21,3% que sobraram.** É cauda longa: os 42 substantivos mais
+  comuns entre os sem tema cobriam só 5 mil dos 36 mil, e os padrões já
+  aplicados pegaram 10 mil. O resto exigiria as categorias de cada artigo, e
+  cada padrão novo precisa da mesma conferência de precisão — o modo de errar
+  aqui é casar menção de passagem.
+- **Audiência para o resto do pool** — *hoje vale menos do que parecia*. A
+  cobertura por fonte é o que importa, não a total:
+
+  | fonte | audiência medida | peso no sorteio |
+  | --- | --- | --- |
+  | Artigos peculiares | **100%** (4.202/4.202) | 70% |
+  | "Você sabia?" | 8,8% (10.620/121.101) | 29% |
+  | varredura ampla | 100% (127/127) | 1% |
+
+  A fonte que domina o sorteio já está completa. Os 110 mil que faltam são
+  todos do "Você sabia?", que responde por 29% dos sorteios e acerta 30% — seis
+  horas de rede para ampliar o modo surpresa dentro da fonte mais fraca.
 - **Backlinks.** Medidos em 3,8% do pool, e a ausência custa pouco: 0,943 de
-  correlação de postos com o score completo.
-- **Temas para os 29% sem cobertura**, que exigiria as categorias de cada
-  artigo — cerca de 18.700 requests.
+  correlação de postos com o score completo. Continua não valendo.
