@@ -96,3 +96,43 @@ describe("upsertArticles", () => {
     expect(n.n).toBe(0);
   });
 });
+
+describe("upsertArticles — a nota da fonte curada", () => {
+  it("não deixa outra fonte sobrescrever a nota de quem chegou primeiro", () => {
+    // Bug real: 129 artigos da lista peculiar tiveram a piada do curador
+    // trocada pelo gancho do "Você sabia?" porque estavam nas duas fontes.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tikwiki-nota-"));
+    const db = openDb({ file: path.join(dir, "n.db") });
+
+    const base = {
+      lang: "en",
+      pageId: 1,
+      title: "Salish Sea human foot discoveries",
+      url: "https://en.wikipedia.org/wiki/S",
+    };
+    upsertArticles(db, [
+      { ...base, source: "unusual", curated: true, curatorNote: "Severed feet keep washing up." },
+    ]);
+    upsertArticles(db, [
+      { ...base, source: "dyk", curated: true, curatorNote: "Five detached human feet have been discovered?" },
+    ]);
+
+    const r = db.prepare(`SELECT curator_note n, source s FROM articles WHERE page_id = 1`).get() as {
+      n: string;
+      s: string;
+    };
+    expect(r.n).toBe("Severed feet keep washing up.");
+    expect(r.s).toBe("unusual");
+
+    // A mesma fonte reingerindo continua podendo corrigir a nota.
+    upsertArticles(db, [
+      { ...base, source: "unusual", curated: true, curatorNote: "Severed feet keep washing up, plural." },
+    ]);
+    expect(
+      (db.prepare(`SELECT curator_note n FROM articles WHERE page_id = 1`).get() as { n: string }).n,
+    ).toBe("Severed feet keep washing up, plural.");
+
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
