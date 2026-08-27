@@ -186,9 +186,35 @@ export default function Reader({
   return (
     <main className="mx-auto flex min-h-dvh max-w-3xl flex-col gap-6 px-5 py-8 sm:py-12">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="font-serif text-xl tracking-tight">
-          Tik<span className="text-accent">Wiki</span>
-        </h1>
+        {/* O link de autoria fica ao lado do logo, e não no rodapé, por
+            medição: a altura da página varia com o artigo sorteado — de 900 a
+            977px numa janela de 900 — e em 4 de 10 cargas o rodapé cai abaixo
+            da dobra. No celular ele sai de vista de vez. No cabeçalho a
+            visibilidade não depende do artigo e o custo vertical é zero: no
+            desktop sobram 354px entre o logo e os seletores, e no celular o
+            cabeçalho já quebra em duas linhas, com a do logo livre.
+            A marca do GitHub vai inline, sem request externo. */}
+        <div className="flex items-baseline gap-2.5">
+          <h1 className="font-serif text-xl tracking-tight">
+            Tik<span className="text-accent">Wiki</span>
+          </h1>
+          <a
+            href="https://github.com/Vendru"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Código e outros projetos no GitHub"
+            className="inline-flex items-center gap-1 text-xs text-muted/70 transition hover:text-paper"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+              className="h-3.5 w-3.5 shrink-0 translate-y-px fill-current"
+            >
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+            </svg>
+            Vendru
+          </a>
+        </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <label className="sr-only" htmlFor="tema">
