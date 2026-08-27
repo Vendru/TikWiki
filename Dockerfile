@@ -31,8 +31,10 @@ FROM node:22-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+# Padrão para rodar a imagem na mão; em produção a plataforma injeta a porta
+# dela e o valor daqui é sobrescrito. A Render usa 10000.
 ENV PORT=3000
-# Sem isto o Next escuta só em localhost e o proxy do Fly não alcança.
+# Sem isto o Next escuta só em localhost e nenhum proxy externo alcança.
 ENV HOSTNAME=0.0.0.0
 
 RUN useradd --system --create-home --uid 1001 tikwiki

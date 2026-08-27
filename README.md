@@ -467,10 +467,9 @@ função, e `pool.db` tem 207 MB — seriam 207 MB por função, em todo deploy,
 leitura desse arquivo em cada cold start. O `better-sqlite3` também é nativo e
 não roda em edge runtime, e é por isso que as rotas fixam `runtime = "nodejs"`.
 
-```bash
-fly launch --no-deploy   # só na primeira vez, para criar o app
-fly deploy
-```
+O `render.yaml` na raiz é um Blueprint: em <https://dashboard.render.com>, em
+**New → Blueprint**, aponte para este repositório e a Render lê o arquivo e cria
+o serviço. Não é preciso cartão para o plano gratuito.
 
 O `Dockerfile` é de dois estágios. O primeiro instala tudo e roda
 `npm run build`, cujo `prebuild` extrai `data/pool.db.gz` para `data/pool.db`.
@@ -513,9 +512,9 @@ O `server.js` do standalone também sobe mais rápido que a CLI: **"Ready" em
 
 Sem ele o build manda mais de 5 GB para o daemon antes de começar.
 
-### Os números que definiram o `fly.toml`
+### O que o app consome
 
-Medidos no build de produção:
+Medido no build de produção, rodando pelo `server.js` do standalone:
 
 | | |
 | --- | --- |
@@ -524,23 +523,47 @@ Medidos no build de produção:
 | resposta da API, a quente | 3 ms |
 | partida do servidor | "Ready" em 0 ms |
 
-Daí `memory = "512mb"`: 256 MB caberia, mas a folga evita o OOM killer no pico
-de subida. `auto_stop_machines` fica ligado porque não há estado a preservar, e
-o health check aponta para `/api/topics`, que é a checagem mais barata que ainda
-toca o banco — um 200 ali prova que o pool foi extraído e abriu.
+Os 144 MB de pico cabem folgados nos 512 MB do plano gratuito da Render. O
+`healthCheckPath` aponta para `/api/topics`, a checagem mais barata que ainda
+toca o banco — um 200 ali prova que o pool foi extraído no build e abriu em
+tempo de execução.
 
-### Rodar de graça
+A Render injeta a variável `PORT` (10000 por padrão) e exige bind em `0.0.0.0`.
+O `server.js` do standalone lê `process.env.PORT`, e o `HOSTNAME=0.0.0.0` do
+Dockerfile atende o resto. Conferido rodando com `PORT=10000`: o servidor sobe
+na porta injetada e responde tanto por `localhost` quanto pelo IP da máquina.
 
-O app cabe em plano gratuito, mas o que decide não é a memória (144 MB no pico)
-e sim **a hibernação**. Este é um produto de um clique: quem abre o link espera
-um artigo, não 50 segundos de máquina acordando. Vale conferir o tempo de
-retorno a frio da plataforma antes de escolher, porque é ele que estraga a
-primeira impressão — os 273 MB de camadas e a partida em 0 ms ajudam, mas não
-compensam uma plataforma que demora a acordar.
+### O que o plano gratuito custa
+
+Não é memória, é **hibernação**. Da documentação da Render: o serviço gratuito
+hiberna após **15 minutos sem tráfego** e leva **cerca de um minuto** para
+acordar, dentro de um teto de 750 horas por mês.
+
+Num produto de um clique isso é caro: quem recebe o link espera um artigo, não
+um minuto de tela em branco. Os 273 MB de camadas e a partida em 0 ms ajudam,
+mas não compensam a hibernação da plataforma. A própria Render avisa que o plano
+gratuito não é para produção.
+
+O disco efêmero, por outro lado, não incomoda: o pool vai dentro da imagem e
+nada é escrito em produção.
+
+**Para mostrar a alguém agora, sem hibernação e sem cadastro**, um túnel a
+partir da sua máquina resolve:
+
+```bash
+node .next/standalone/server.js &
+cloudflared tunnel --url http://localhost:3000
+```
+
+Devolve uma URL pública sem conta, domínio ou cartão. A URL é aleatória e muda a
+cada reinício, o teto é de 200 requisições simultâneas, e a Cloudflare diz que é
+para teste e desenvolvimento — serve para "olha o que eu fiz", não para um link
+que vive.
 
 Planos gratuitos mudam com frequência; confirme os limites atuais antes de
 decidir. O `Dockerfile` é padrão e serve em qualquer plataforma de contêiner,
-então trocar de provedor depois não exige mudar o repositório.
+então trocar de provedor depois não exige mudar o repositório — só o
+`render.yaml`, que é um arquivo isolado.
 
 ### Antes de abrir para o público
 

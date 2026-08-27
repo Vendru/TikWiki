@@ -1,0 +1,29 @@
+# Blueprint da Render.
+#
+# O TikWiki é read-only em produção: nenhuma escrita, nenhum estado entre
+# requests, nenhuma chamada de rede durante um request. O pool vai dentro da
+# imagem, então o disco efêmero do plano gratuito não é limitação — não há
+# nada a persistir.
+
+services:
+  - type: web
+    name: tikwiki
+    runtime: docker
+    plan: free
+    # Das regiões disponíveis (oregon, ohio, virginia, frankfurt, singapore),
+    # virginia é a mais próxima do Brasil.
+    region: virginia
+    dockerfilePath: ./Dockerfile
+
+    # A checagem mais barata que ainda toca o banco: uma consulta agregada
+    # sobre a tabela de temas. Um 200 aqui prova que o pool foi extraído no
+    # build e abriu em tempo de execução.
+    healthCheckPath: /api/topics
+
+    envVars:
+      - key: WIKI_LANG
+        value: en
+    # PORT fica de fora de propósito: a Render injeta a dela (10000 por
+    # padrão) e ela sobrescreve o ENV da imagem. O server.js do standalone lê
+    # process.env.PORT, e o HOSTNAME=0.0.0.0 do Dockerfile atende a exigência
+    # de bind em 0.0.0.0.
