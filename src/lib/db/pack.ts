@@ -33,13 +33,19 @@ export async function packPool(): Promise<{ cru: number; comprimido: number }> {
 
   // Empacotar significa que o cru está em dia, e a data dele passa a dizer
   // isso. Sem essa marca o comprimido nasce mais novo e o build seguinte
-  // reextrairia centenas de MB à toa. Marcamos o cru, e não alinhamos os dois
-  // carimbos, porque utimesSync arredonda na casa do microssegundo e o
-  // comprimido acabava 0,05 ms à frente — o bastante para a comparação virar.
+  // reextrairia centenas de MB à toa.
+  //
+  // A marca é derivada do próprio comprimido, um segundo à frente, em vez de
+  // `new Date()`: com o relógio, a ordem só se sustenta se ele andar entre as
+  // duas escritas, e sob I/O pesado essa janela fecha — o teste de "já está em
+  // dia" falhou assim uma vez logo depois de um npm ci. Alinhar os dois
+  // carimbos também não serve, porque utimesSync arredonda na casa do
+  // microssegundo e o comprimido acabava 0,05 ms à frente.
+  //
   // Um .gz vindo do git chega com data nova e continua disparando a extração,
   // que é o comportamento certo.
-  const agora = new Date();
-  fs.utimesSync(origem, agora, agora);
+  const marca = new Date(mtime(destino) + 1000);
+  fs.utimesSync(origem, marca, marca);
 
   return { cru: fs.statSync(origem).size, comprimido: fs.statSync(destino).size };
 }
