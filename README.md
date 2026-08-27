@@ -456,6 +456,123 @@ que veio de fonte curada.
 `ingest_runs` registra cada execução (achados, gravados, descartados) para dar
 para saber a idade e a procedência do pool.
 
+## Publicar
+
+O app é read-only: nenhuma escrita, nenhum estado entre requests, nenhuma
+chamada de rede durante um request. O que ele precisa é do banco em disco
+local. Isso descarta serverless e pede um contêiner.
+
+**Por que não Vercel.** O modelo serverless empacota os arquivos junto com a
+função, e `pool.db` tem 207 MB — seriam 207 MB por função, em todo deploy, e a
+leitura desse arquivo em cada cold start. O `better-sqlite3` também é nativo e
+não roda em edge runtime, e é por isso que as rotas fixam `runtime = "nodejs"`.
+
+O `render.yaml` na raiz é um Blueprint: em <https://dashboard.render.com>, em
+**New → Blueprint**, aponte para este repositório e a Render lê o arquivo e cria
+o serviço. Não é preciso cartão para o plano gratuito.
+
+O `Dockerfile` é de dois estágios. O primeiro instala tudo e roda
+`npm run build`, cujo `prebuild` extrai `data/pool.db.gz` para `data/pool.db`.
+Com `output: "standalone"` o build monta em `.next/standalone` exatamente o que
+o servidor precisa, e o segundo estágio copia só isso mais os estáticos.
+
+Debian e não Alpine de propósito: o `better-sqlite3` tem binário pronto para
+glibc, e em musl ele compila do zero a cada build.
+
+### O que o `standalone` corta
+
+| | ingênuo | standalone |
+| --- | --- | --- |
+| dependências | 474 MB instaladas | **73 MB** rastreadas |
+| `.next` | 379 MB (291 de cache de build, 67 de dev) | **1,2 MB** + 612 KB de estáticos |
+| pool | 198 MB | 198 MB |
+| **camadas do app** | **~1,05 GB** | **~273 MB** |
+
+Sem ele iam junto 45 MB de `sharp` — que este app não usa, porque as imagens
+vêm do CDN da Wikimedia por `<img>` puro — e todo o cache de build.
+
+Uma armadilha que custou uma iteração: o rastreamento do Next lê os caminhos
+montados em `src/lib/config.ts`, conclui que o diretório inteiro é necessário e
+**copiou os 3,9 GB do `.cache` para dentro do standalone**. É a mesma causa do
+aviso de "overly broad patterns" que o build sempre imprimiu. O
+`outputFileTracingExcludes` no `next.config.ts` fecha isso.
+
+O `server.js` do standalone também sobe mais rápido que a CLI: **"Ready" em
+0 ms contra 407 ms** do `next start`, o que importa em plataforma que hiberna.
+
+### O `.dockerignore` não é opcional
+
+| | tamanho |
+| --- | --- |
+| `.cache` (respostas cruas da API) | 3,9 GB |
+| `node_modules` | 617 MB |
+| `.git` (guarda várias versões do pool) | 447 MB |
+| `data/pool.db` (regerado no build) | 198 MB |
+| **contexto que sobra** | **65 MB** |
+
+Sem ele o build manda mais de 5 GB para o daemon antes de começar.
+
+### O que o app consome
+
+Medido no build de produção, rodando pelo `server.js` do standalone:
+
+| | |
+| --- | --- |
+| memória em repouso | 91 MB |
+| memória após 100 requests | 144 MB |
+| resposta da API, a quente | 3 ms |
+| partida do servidor | "Ready" em 0 ms |
+
+Os 144 MB de pico cabem folgados nos 512 MB do plano gratuito da Render. O
+`healthCheckPath` aponta para `/api/topics`, a checagem mais barata que ainda
+toca o banco — um 200 ali prova que o pool foi extraído no build e abriu em
+tempo de execução.
+
+A Render injeta a variável `PORT` (10000 por padrão) e exige bind em `0.0.0.0`.
+O `server.js` do standalone lê `process.env.PORT`, e o `HOSTNAME=0.0.0.0` do
+Dockerfile atende o resto. Conferido rodando com `PORT=10000`: o servidor sobe
+na porta injetada e responde tanto por `localhost` quanto pelo IP da máquina.
+
+### O que o plano gratuito custa
+
+Não é memória, é **hibernação**. Da documentação da Render: o serviço gratuito
+hiberna após **15 minutos sem tráfego** e leva **cerca de um minuto** para
+acordar, dentro de um teto de 750 horas por mês.
+
+Num produto de um clique isso é caro: quem recebe o link espera um artigo, não
+um minuto de tela em branco. Os 273 MB de camadas e a partida em 0 ms ajudam,
+mas não compensam a hibernação da plataforma. A própria Render avisa que o plano
+gratuito não é para produção.
+
+O disco efêmero, por outro lado, não incomoda: o pool vai dentro da imagem e
+nada é escrito em produção.
+
+**Para mostrar a alguém agora, sem hibernação e sem cadastro**, um túnel a
+partir da sua máquina resolve:
+
+```bash
+node .next/standalone/server.js &
+cloudflared tunnel --url http://localhost:3000
+```
+
+Devolve uma URL pública sem conta, domínio ou cartão. A URL é aleatória e muda a
+cada reinício, o teto é de 200 requisições simultâneas, e a Cloudflare diz que é
+para teste e desenvolvimento — serve para "olha o que eu fiz", não para um link
+que vive.
+
+Planos gratuitos mudam com frequência; confirme os limites atuais antes de
+decidir. O `Dockerfile` é padrão e serve em qualquer plataforma de contêiner,
+então trocar de provedor depois não exige mudar o repositório — só o
+`render.yaml`, que é um arquivo isolado.
+
+### Antes de abrir para o público
+
+- **As imagens vêm do CDN da Wikimedia por hotlink.** É o que a API entrega e é
+  aceitável em tráfego normal, mas em escala é carga na infraestrutura deles.
+- **`/api/random` não tem limite de taxa.** Cada request é read-only e custa
+  11–22 ms, então o risco é baixo — mas é uma rota que qualquer um pode chamar
+  em laço, e vale um limite se a plataforma cobrar por request.
+
 ## Licença do conteúdo
 
 O texto dos artigos vem da Wikipédia sob CC BY-SA 4.0. O app precisa exibir a
