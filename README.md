@@ -472,14 +472,34 @@ fly launch --no-deploy   # só na primeira vez, para criar o app
 fly deploy
 ```
 
-O `Dockerfile` é de dois estágios: o primeiro instala tudo, roda `npm run build`
-(cujo `prebuild` extrai `data/pool.db.gz` para `data/pool.db`) e depois
-`npm prune --omit=dev`; o segundo copia só `node_modules`, `.next`, `config`,
-`package.json`, `next.config.ts` e o `pool.db` extraído. O `.gz` de 66 MB não
-entra na imagem final, e `tsx`, `vitest` e `typescript` tampouco.
+O `Dockerfile` é de dois estágios. O primeiro instala tudo e roda
+`npm run build`, cujo `prebuild` extrai `data/pool.db.gz` para `data/pool.db`.
+Com `output: "standalone"` o build monta em `.next/standalone` exatamente o que
+o servidor precisa, e o segundo estágio copia só isso mais os estáticos.
 
 Debian e não Alpine de propósito: o `better-sqlite3` tem binário pronto para
 glibc, e em musl ele compila do zero a cada build.
+
+### O que o `standalone` corta
+
+| | ingênuo | standalone |
+| --- | --- | --- |
+| dependências | 474 MB instaladas | **73 MB** rastreadas |
+| `.next` | 379 MB (291 de cache de build, 67 de dev) | **1,2 MB** + 612 KB de estáticos |
+| pool | 198 MB | 198 MB |
+| **camadas do app** | **~1,05 GB** | **~273 MB** |
+
+Sem ele iam junto 45 MB de `sharp` — que este app não usa, porque as imagens
+vêm do CDN da Wikimedia por `<img>` puro — e todo o cache de build.
+
+Uma armadilha que custou uma iteração: o rastreamento do Next lê os caminhos
+montados em `src/lib/config.ts`, conclui que o diretório inteiro é necessário e
+**copiou os 3,9 GB do `.cache` para dentro do standalone**. É a mesma causa do
+aviso de "overly broad patterns" que o build sempre imprimiu. O
+`outputFileTracingExcludes` no `next.config.ts` fecha isso.
+
+O `server.js` do standalone também sobe mais rápido que a CLI: **"Ready" em
+0 ms contra 407 ms** do `next start`, o que importa em plataforma que hiberna.
 
 ### O `.dockerignore` não é opcional
 
@@ -499,15 +519,28 @@ Medidos no build de produção:
 
 | | |
 | --- | --- |
-| memória em repouso | 94 MB |
-| memória após 100 requests | 139 MB |
-| resposta da API | 11–22 ms |
+| memória em repouso | 91 MB |
+| memória após 100 requests | 144 MB |
+| resposta da API, a quente | 3 ms |
+| partida do servidor | "Ready" em 0 ms |
 
 Daí `memory = "512mb"`: 256 MB caberia, mas a folga evita o OOM killer no pico
-de subida do Next. `auto_stop_machines` fica ligado porque não há estado a
-preservar, e o health check aponta para `/api/topics`, que é a checagem mais
-barata que ainda toca o banco — um 200 ali prova que o pool foi extraído e
-abriu.
+de subida. `auto_stop_machines` fica ligado porque não há estado a preservar, e
+o health check aponta para `/api/topics`, que é a checagem mais barata que ainda
+toca o banco — um 200 ali prova que o pool foi extraído e abriu.
+
+### Rodar de graça
+
+O app cabe em plano gratuito, mas o que decide não é a memória (144 MB no pico)
+e sim **a hibernação**. Este é um produto de um clique: quem abre o link espera
+um artigo, não 50 segundos de máquina acordando. Vale conferir o tempo de
+retorno a frio da plataforma antes de escolher, porque é ele que estraga a
+primeira impressão — os 273 MB de camadas e a partida em 0 ms ajudam, mas não
+compensam uma plataforma que demora a acordar.
+
+Planos gratuitos mudam com frequência; confirme os limites atuais antes de
+decidir. O `Dockerfile` é padrão e serve em qualquer plataforma de contêiner,
+então trocar de provedor depois não exige mudar o repositório.
 
 ### Antes de abrir para o público
 
