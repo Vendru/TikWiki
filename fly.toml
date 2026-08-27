@@ -1,0 +1,49 @@
+# Configuração do Fly.io.
+#
+# O TikWiki é read-only em produção: nenhuma escrita, nenhum volume, nenhum
+# estado entre requests. O banco vai dentro da imagem, então a máquina é
+# descartável e escalar é só subir outra.
+
+app = "tikwiki"
+primary_region = "gru"
+
+[build]
+
+[env]
+  PORT = "3000"
+  WIKI_LANG = "en"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_start_machines = true
+  # Sem estado para preservar, parar a máquina ociosa não custa nada além do
+  # tempo de subir de novo no próximo acesso.
+  auto_stop_machines = "stop"
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    # Medido: 11 a 22 ms por request, tudo em memória e disco local. O limite
+    # existe para o proxy saber quando abrir outra máquina, não porque o
+    # processo trave antes disso.
+    soft_limit = 200
+    hard_limit = 250
+
+  # /api/topics é a checagem mais barata que ainda toca o banco: uma consulta
+  # agregada sobre a tabela de temas. Um 200 aqui significa que o pool foi
+  # extraído e abriu.
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/api/topics"
+    timeout = "5s"
+
+[[vm]]
+  # Medido: 94 MB em repouso, 139 MB depois de 100 requests. 256 MB caberia,
+  # mas 512 MB é a folga que evita o OOM killer no pico de subida do Next e
+  # custa pouco mais.
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

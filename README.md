@@ -456,6 +456,67 @@ que veio de fonte curada.
 `ingest_runs` registra cada execução (achados, gravados, descartados) para dar
 para saber a idade e a procedência do pool.
 
+## Publicar
+
+O app é read-only: nenhuma escrita, nenhum estado entre requests, nenhuma
+chamada de rede durante um request. O que ele precisa é do banco em disco
+local. Isso descarta serverless e pede um contêiner.
+
+**Por que não Vercel.** O modelo serverless empacota os arquivos junto com a
+função, e `pool.db` tem 207 MB — seriam 207 MB por função, em todo deploy, e a
+leitura desse arquivo em cada cold start. O `better-sqlite3` também é nativo e
+não roda em edge runtime, e é por isso que as rotas fixam `runtime = "nodejs"`.
+
+```bash
+fly launch --no-deploy   # só na primeira vez, para criar o app
+fly deploy
+```
+
+O `Dockerfile` é de dois estágios: o primeiro instala tudo, roda `npm run build`
+(cujo `prebuild` extrai `data/pool.db.gz` para `data/pool.db`) e depois
+`npm prune --omit=dev`; o segundo copia só `node_modules`, `.next`, `config`,
+`package.json`, `next.config.ts` e o `pool.db` extraído. O `.gz` de 66 MB não
+entra na imagem final, e `tsx`, `vitest` e `typescript` tampouco.
+
+Debian e não Alpine de propósito: o `better-sqlite3` tem binário pronto para
+glibc, e em musl ele compila do zero a cada build.
+
+### O `.dockerignore` não é opcional
+
+| | tamanho |
+| --- | --- |
+| `.cache` (respostas cruas da API) | 3,9 GB |
+| `node_modules` | 617 MB |
+| `.git` (guarda várias versões do pool) | 447 MB |
+| `data/pool.db` (regerado no build) | 198 MB |
+| **contexto que sobra** | **65 MB** |
+
+Sem ele o build manda mais de 5 GB para o daemon antes de começar.
+
+### Os números que definiram o `fly.toml`
+
+Medidos no build de produção:
+
+| | |
+| --- | --- |
+| memória em repouso | 94 MB |
+| memória após 100 requests | 139 MB |
+| resposta da API | 11–22 ms |
+
+Daí `memory = "512mb"`: 256 MB caberia, mas a folga evita o OOM killer no pico
+de subida do Next. `auto_stop_machines` fica ligado porque não há estado a
+preservar, e o health check aponta para `/api/topics`, que é a checagem mais
+barata que ainda toca o banco — um 200 ali prova que o pool foi extraído e
+abriu.
+
+### Antes de abrir para o público
+
+- **As imagens vêm do CDN da Wikimedia por hotlink.** É o que a API entrega e é
+  aceitável em tráfego normal, mas em escala é carga na infraestrutura deles.
+- **`/api/random` não tem limite de taxa.** Cada request é read-only e custa
+  11–22 ms, então o risco é baixo — mas é uma rota que qualquer um pode chamar
+  em laço, e vale um limite se a plataforma cobrar por request.
+
 ## Licença do conteúdo
 
 O texto dos artigos vem da Wikipédia sob CC BY-SA 4.0. O app precisa exibir a

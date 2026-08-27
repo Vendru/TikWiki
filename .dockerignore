@@ -1,0 +1,25 @@
+# O .git passa de 380 MB: guarda várias versões do pool comprimido. Sem esta
+# linha ele entra no contexto de build e a imagem dobra de tamanho à toa.
+.git
+.gitignore
+
+node_modules
+.next
+out
+
+# Cache das respostas cruas da API: local, recriável, e grande.
+.cache
+
+# O pool cru é gerado no build a partir do .gz versionado. Copiá-lo daqui
+# mandaria 200 MB para o contexto e ainda arriscaria subir um banco velho.
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+.env
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+Dockerfile
+.dockerignore
