@@ -33,6 +33,7 @@ pontuado, o sorteio ponderado com temas e modos, e o ciclo de calibração.
 ```bash
 npm install
 npm run dev                # app em http://localhost:3000 (extrai o pool antes)
+npm run build && npm start # o mesmo que roda em produção
 npm test
 npm run typecheck
 
@@ -500,6 +501,13 @@ aviso de "overly broad patterns" que o build sempre imprimiu. O
 O `server.js` do standalone também sobe mais rápido que a CLI: **"Ready" em
 0 ms contra 407 ms** do `next start`, o que importa em plataforma que hiberna.
 
+Uma consequência do standalone: **`next start` deixa de funcionar** — o próprio
+Next avisa e manda usar `node .next/standalone/server.js`. E o standalone não
+inclui `.next/static`, por design, porque espera que quem empacota copie os
+estáticos para dentro dele. No Dockerfile isso é um `COPY`; localmente é o
+`scripts/serve.ts`, que o `npm start` chama: ele confere se o build existe,
+espelha os estáticos e sobe o servidor.
+
 ### O `.dockerignore` não é opcional
 
 | | tamanho |
@@ -551,7 +559,7 @@ nada é escrito em produção.
 partir da sua máquina resolve:
 
 ```bash
-node .next/standalone/server.js &
+npm run build && npm start &
 cloudflared tunnel --url http://localhost:3000
 ```
 
