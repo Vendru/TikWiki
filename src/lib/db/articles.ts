@@ -44,7 +44,16 @@ export function upsertArticles(db: DB, rows: ArticleRecord[]): number {
       url           = excluded.url,
       extract       = COALESCE(excluded.extract, articles.extract),
       thumbnail_url = COALESCE(excluded.thumbnail_url, articles.thumbnail_url),
-      curator_note  = COALESCE(excluded.curator_note, articles.curator_note),
+      -- A nota é protegida como o source: a primeira fonte curada a reivindicar
+      -- o artigo fica dona dela. Sem isso o gancho do "Você sabia?" sobrescrevia
+      -- a piada do curador da lista peculiar sempre que o artigo estava nas
+      -- duas — 129 artigos, e é o melhor conteúdo do pool que se perdia.
+      -- A mesma fonte reingerindo continua atualizando a nota.
+      curator_note  = CASE
+                        WHEN articles.curated = 1 AND articles.source <> excluded.source
+                          THEN COALESCE(articles.curator_note, excluded.curator_note)
+                        ELSE COALESCE(excluded.curator_note, articles.curator_note)
+                      END,
       bytes         = COALESCE(excluded.bytes, articles.bytes),
       langlinks     = COALESCE(excluded.langlinks, articles.langlinks),
       backlinks     = COALESCE(excluded.backlinks, articles.backlinks),

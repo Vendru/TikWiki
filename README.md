@@ -537,31 +537,65 @@ O ciclo é: gerar a amostra em JSON, marcar `"bom": true` ou `false` em cada
 item, e rodar `--judge`. Ele devolve a taxa de acerto total e por fonte, que é
 o que diz qual peso mexer.
 
-### As duas rodadas
+### As três rodadas
 
-Critério em ambas: "eu abriria este artigo?".
+Critério em todas: "eu abriria este artigo?".
 
-| rodada | pesos no sorteio | total | Artigos peculiares | "Você sabia?" | varredura |
+| rodada | pesos | total | Artigos peculiares | "Você sabia?" | varredura |
 | --- | --- | --- | --- | --- | --- |
-| primeira, 40 artigos | 50/45/5 | 25/40 = 63% | 21/21 = 100% | 4/18 = 22% | 0/1 = 0% |
-| segunda, 30 artigos | 60/39/1 | 23/30 = 77% | 18/18 = 100% | 5/12 = 42% | — |
-| **juntas** | | **48/70 = 69%** | **39/39 = 100%** | **9/30 = 30%** | **0/1 = 0%** |
+| 1ª, 40 artigos | 50/45/5 | 25/40 = 63% | 21/21 = 100% | 4/18 = 22% | 0/1 |
+| 2ª, 30 artigos | 60/39/1 | 23/30 = 77% | 18/18 = 100% | 5/12 = 42% | — |
+| 3ª, 40 artigos | 70/29/1 | 27/40 = 68% | 21/24 = 88% | 5/14 = 36% | 1/2 |
+| **juntas** | | **75/110 = 68%** | **60/63 = 95,2%** | **14/44 = 32%** | **1/3** |
 
 As taxas por fonte são condicionais à fonte, então somam entre rodadas mesmo
 tendo saído de pesos diferentes.
 
-**Os dois julgamentos não divergem.** Parece que sim — 22% contra 42% no "Você
-sabia?" — mas os intervalos de confiança de 95% são [9%, 45%] e [19%, 68%]:
-sobrepõem-se quase por inteiro. Com 12 e 18 casos não há como distinguir.
+**Os 100% da lista peculiar eram sorte.** Duas rodadas seguidas de 39/39 são
+compatíveis com uma taxa real de 95%, e a terceira trouxe 88%. Com 63 casos a
+estimativa honesta é **95,2%, IC 95% [87%, 98%]** — e foi ela que derrubou a
+previsão de 79% para 76%.
 
-**A melhora de 63% para 77% é dos pesos, não do juiz.** Aplicando as taxas por
-fonte agrupadas aos pesos de cada rodada, o modelo prevê 64% para a primeira
-(observado 63%) e 72% para a segunda (observado 77%). A reponderação fez o que
-prometia.
+**O modelo não quebrou.** Ele prevê a taxa total a partir das taxas por fonte e
+da **composição realmente sorteada**, que varia em torno dos pesos. A amostra da
+3ª rodada saiu 60/35/5 em vez de 70/29/1:
 
-O que sobra é o gargalo real: a lista peculiar acerta 100% em 39 artigos e dois
-juízes independentes, e o "Você sabia?" acerta 30%. Como cerca de 4 em cada 10
-sorteios vêm dele, ele responde sozinho por quase todos os erros.
+| rodada | previsto | observado |
+| --- | --- | --- |
+| 1ª | 64% | 63% |
+| 2ª | 70% | 77% |
+| 3ª | 70% | 68% |
+
+O gargalo continua sendo o "Você sabia?", com 32% em 44 casos.
+
+**Não subir mais o peso.** 80/19/1 preveria 83% e 90/9/1 preveria 89%, e não é
+para fazer isso. Cada dez pontos de peso compram sete de acerto e cobram
+variedade: a 90/9/1 o produto vira a lista peculiar com um fio de ruído, os 121
+mil artigos do "Você sabia?" deixam de existir na prática, e 4.202 artigos
+esgotam em 93 sessões. Perseguir a métrica até o fim entrega um número melhor e
+um produto pior.
+
+### A nota trocada, achada na 3ª rodada
+
+Dois dos três artigos reprovados da lista peculiar tinham nota em formato de
+gancho — "Kyle Larson won the first stock car race he ever competed in?" — que
+não é como o curador da lista escreve. A causa estava no upsert: `source` era
+protegido quando o artigo já vinha de fonte curada, mas `curator_note` não, e o
+gancho do "Você sabia?" sobrescrevia a piada do curador sempre que o artigo
+estava nas duas fontes. **129 artigos, 3,1% da lista.**
+
+| | |
+| --- | --- |
+| curador | "Severed feet keep washing up." |
+| o que estava no pool | "Five detached human feet have been discovered on British Columbian beaches since August 2007" |
+
+A nota agora é protegida como o `source`: a primeira fonte curada a reivindicar
+o artigo fica dona dela, e a mesma fonte reingerindo continua podendo corrigi-la.
+As 129 foram restauradas — zero divergências contra a lista real.
+
+Com n=3 não dá para afirmar que a nota trocada causou as reprovações, mas o
+conserto vale por si: era o melhor conteúdo do pool sendo substituído por texto
+pior.
 
 ### Por que não deu para resolver com filtro
 
