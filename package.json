@@ -29,7 +29,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "tsx scripts/serve.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "ingest:unusual": "tsx scripts/ingest-unusual.ts",
