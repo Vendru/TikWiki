@@ -20,7 +20,11 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-# Roda o prebuild (extrai o pool) e compila o Next. Com output "standalone" o
+# Liga a saída standalone só aqui, no build da imagem: o build local não a
+# quer, porque ela faria o app servir as cópias que o rastreamento deixa em
+# .next/standalone em vez de data/pool.db. Ver o comentário em next.config.ts.
+ENV NEXT_STANDALONE=1
+# Roda o prebuild (extrai o pool) e compila o Next. Com a saída standalone o
 # build já monta em .next/standalone tudo que o servidor precisa: um
 # node_modules rastreado de 73 MB (contra 474 MB do instalado), o config/ e o
 # pool extraído. Não há o que podar depois.

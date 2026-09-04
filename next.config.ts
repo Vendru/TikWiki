@@ -7,7 +7,15 @@ const nextConfig: NextConfig = {
   // para a imagem. Sem isto a imagem passa de 1,2 GB: 474 MB de dependências
   // (das quais 45 MB são o sharp, que este app não usa) e 358 MB de cache de
   // build dentro do .next.
-  output: "standalone",
+  //
+  // Ligado só no build da imagem, pelo ENV do Dockerfile, porque é uma decisão
+  // de empacotamento e não do app. Ligado sempre, ele contamina o build local:
+  // o servidor do standalone faz process.chdir para dentro de .next/standalone,
+  // e o `root = process.cwd()` de src/lib/config.ts passa a apontar para as
+  // cópias que o rastreamento fez ali — o app serviria um pool congelado no
+  // build, ignorando em silêncio o que a pipeline gravou em data/pool.db. Além
+  // de deixar uma segunda cópia de 207 MB no disco.
+  output: process.env.NEXT_STANDALONE ? "standalone" : undefined,
   // O rastreamento vê os caminhos montados em src/lib/config.ts e puxa
   // diretórios inteiros que só a pipeline usa: o cache das respostas cruas tem
   // 3,9 GB e ia junto. É a mesma causa do aviso de "overly broad patterns" no

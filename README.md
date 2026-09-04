@@ -33,7 +33,7 @@ pontuado, o sorteio ponderado com temas e modos, e o ciclo de calibração.
 ```bash
 npm install
 npm run dev                # app em http://localhost:3000 (extrai o pool antes)
-npm run build && npm start # o mesmo que roda em produção
+npm run build && npm start # sobe o build de produção localmente
 npm test
 npm run typecheck
 
@@ -501,12 +501,20 @@ aviso de "overly broad patterns" que o build sempre imprimiu. O
 O `server.js` do standalone também sobe mais rápido que a CLI: **"Ready" em
 0 ms contra 407 ms** do `next start`, o que importa em plataforma que hiberna.
 
-Uma consequência do standalone: **`next start` deixa de funcionar** — o próprio
-Next avisa e manda usar `node .next/standalone/server.js`. E o standalone não
-inclui `.next/static`, por design, porque espera que quem empacota copie os
-estáticos para dentro dele. No Dockerfile isso é um `COPY`; localmente é o
-`scripts/serve.ts`, que o `npm start` chama: ele confere se o build existe,
-espelha os estáticos e sobe o servidor.
+### Por que a saída standalone é ligada só no build da imagem
+
+`output: "standalone"` fica atrás de `NEXT_STANDALONE`, que só o `Dockerfile`
+define. Ligada sempre, ela contamina o build local de um jeito silencioso: o
+`server.js` do standalone faz `process.chdir` para dentro de `.next/standalone`,
+e o `root = process.cwd()` de `src/lib/config.ts` passa a resolver ali. O app
+serviria então o `config/` e o `data/pool.db` que o rastreamento copiou no
+build — dois arquivos distintos dos originais, confirmado por inode — e
+qualquer `npm run enrich`, `npm run prune` ou edição em `config/draw.json`
+ficaria invisível até o próximo build, sem aviso nenhum. De quebra, deixaria uma
+segunda cópia de 207 MB no disco.
+
+Com o flag desligado localmente, `npm start` é o `next start` de sempre: lê os
+arquivos vivos, aceita `-p` e `-H`, e é um processo só.
 
 ### O `.dockerignore` não é opcional
 
@@ -559,7 +567,8 @@ nada é escrito em produção.
 partir da sua máquina resolve:
 
 ```bash
-npm run build && npm start &
+npm run build          # só na primeira vez, ou depois de mudar o código
+npm start &
 cloudflared tunnel --url http://localhost:3000
 ```
 
